@@ -31,6 +31,12 @@
   --accent: #7d95ff; --accent-soft: #232c52; --hot: #ff6b5e; --ok: #4cc993; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.notice-bar { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--fg); border-radius: 10px;
+  padding: 12px 16px; font-size: 14.5px; display: flex; gap: 10px; align-items: baseline; }
+.notice-bar b { color: var(--accent); flex: none; font-size: 12px; letter-spacing: 0.08em; }
+.notice-bar span { min-width: 0; overflow-wrap: anywhere; }
+.lock-note { font-size: 13px; color: var(--muted); }
 body {
   background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -137,6 +143,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     <h1>티켓팅 스탠바이</h1>
     <span class="sub">직접 예매를 돕는 준비 도구 · <a href="https://ticket.melon.com" target="_blank" rel="noopener">멜론티켓 열기 ↗</a></span>
   </header>
+  <div class="notice-bar" id="noticeBar" role="status" hidden><b>공지</b><span id="noticeText"></span></div>
 
   <section class="ticket" aria-label="오픈 카운트다운">
     <div class="main">
@@ -204,6 +211,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
         <input type="text" id="newItem" placeholder="항목 추가 (예: 2순위 구역 R석 B블록)">
         <button type="submit">추가</button>
       </form>
+      <p class="lock-note" id="lockNote" hidden>관리자가 항목 추가·삭제를 잠가 두었어요. 체크는 할 수 있어요.</p>
       <div class="row"><button class="small" id="resetChecks">체크 모두 해제</button></div>
     </section>
 
@@ -255,6 +263,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     if (d.getTime() <= now()) d.setDate(d.getDate() + 1);
     return d.getTime();
   }
+  let eventTitle = '';
   let target = store.get('target', null);
   if (!target) target = nextAt('20:00:00');
 
@@ -386,10 +395,10 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     const d = new Date(n);
     nowEl.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
     if (rem > 0) {
-      cdEl.innerHTML = fmtDur(rem); cdLabel.textContent = '예매 오픈까지';
+      cdEl.innerHTML = fmtDur(rem); cdLabel.textContent = eventTitle ? `${eventTitle} · 예매 오픈까지` : '예매 오픈까지';
       cdEl.className = 'countdown num' + (rem <= Math.max(pre(), 3) * 1000 + 999 ? ' urgent' : '');
     } else {
-      cdEl.innerHTML = '+' + fmtDur(-rem); cdLabel.textContent = '오픈 후 경과 · 지금 예매하세요';
+      cdEl.innerHTML = '+' + fmtDur(-rem); cdLabel.textContent = (eventTitle ? eventTitle + ' · ' : '') + '오픈 후 경과 · 지금 예매하세요';
       cdEl.className = 'countdown num past';
       if (!fired && lastRem > 0 && rem > -3000) { fired = true; if (armed && optFlash.checked) flash(); }
     }
@@ -454,6 +463,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
         items = items.filter(x => x !== it);
         if (remote) await api('DELETE', 'api/items/' + encodeURIComponent(it.id));
       }));
+      del.hidden = !canEdit();
       li.append(cb, sp, del); ul.append(li);
     });
     const done = items.filter(x => x.d).length;
@@ -472,8 +482,28 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     items.forEach(x => x.d = false);
     if (remote) items = await api('POST', 'api/items/uncheck-all');
   }));
-  loadItems();
-  setInterval(() => { if (remote && document.visibilityState === 'visible') loadItems(); }, 15000);
+  /* ---------- 관리자 설정 (공지, 공연·오픈일시, 편집 잠금) ---------- */
+  let config = { notice: null, event: null, lockChecklist: false, isAdmin: false };
+  function canEdit() { return !config.lockChecklist || config.isAdmin; }
+  async function loadConfig() {
+    try { config = await api('GET', 'api/config'); } catch { return; }
+    $('#noticeBar').hidden = !config.notice;
+    $('#noticeText').textContent = config.notice ? config.notice.text : '';
+    eventTitle = config.event && config.event.title ? config.event.title : '';
+    // 관리자가 새 오픈일시를 정하면 한 번 적용하고, 그 뒤 방문자가 바꾼 값은 존중
+    if (config.event && config.event.openAt !== store.get('lastEventAt', null)) {
+      store.set('lastEventAt', config.event.openAt);
+      setTarget(config.event.openAt);
+    }
+    $('#addForm').hidden = !canEdit();
+    $('#lockNote').hidden = canEdit();
+    renderChecks();
+  }
+  loadConfig().then(loadItems);
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    loadConfig(); if (remote) loadItems();
+  }, 15000);
 
   /* ---------- captcha practice ---------- */
   const cv = $('#cap'), cx = cv.getContext('2d');
@@ -516,6 +546,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     const v = $('#capIn').value.trim().toUpperCase(); if (!v) return;
     const t = performance.now() - shownAt, fb = $('#capFb');
     stats.n++;
+    fetch('api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ e: 'captcha' }) }).catch(() => {});
     if (v === answer) {
       stats.ok++; stats.times.push(t); stats.times = stats.times.slice(-50);
       const isBest = stats.best == null || t < stats.best; if (isBest) stats.best = t;

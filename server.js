@@ -6,7 +6,8 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'items.json');
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const LEGACY_ITEMS_FILE = path.join(DATA_DIR, 'items.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 관리자 로그인 유지 2시간
@@ -14,7 +15,11 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;    // 로그인 시도 제한 구간
 const LOGIN_MAX_FAILS = 5;                 // 구간당 허용 실패 횟수
 const MAX_ITEMS = 200;
 const MAX_TEXT = 200;
-const MAX_BODY = 10 * 1024;
+const MAX_NOTICE = 300;
+const MAX_TITLE = 100;
+const MAX_BODY = 32 * 1024;
+const STATS_DAYS = 30;
+const MAX_VISITORS_TRACKED = 50000;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -40,32 +45,71 @@ const DEFAULT_ITEMS = [
   '대기열 진입 후 새로고침하지 않기',
 ];
 
-/* ---------- 할 일 저장소 (JSON 파일) ---------- */
+/* ---------- 저장소 (JSON 파일 하나) ---------- */
 const newId = () => crypto.randomBytes(6).toString('hex');
-let items;
-function loadItems() {
+const defaultItems = () => DEFAULT_ITEMS.map(t => ({ id: newId(), t, d: false }));
+
+let state;
+function loadState() {
   try {
-    items = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    if (!Array.isArray(items)) throw new Error('bad data');
+    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   } catch {
-    items = DEFAULT_ITEMS.map(t => ({ id: newId(), t, d: false }));
-    saveItems();
+    state = {};
+    // 이전 버전(items.json)에서 옮겨 오기
+    try { state.items = JSON.parse(fs.readFileSync(LEGACY_ITEMS_FILE, 'utf8')); } catch {}
   }
+  if (!Array.isArray(state.items)) state.items = defaultItems();
+  state.notice = state.notice || { text: '', on: false };
+  state.event = state.event || { title: '', openAt: null };
+  state.settings = state.settings || { lockChecklist: false };
+  state.stats = state.stats || { days: {}, seen: { day: '', ids: [] } };
+  saveNow();
 }
-function saveItems() {
+
+let saveTimer = null;
+function saveNow() {
+  clearTimeout(saveTimer); saveTimer = null;
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = DATA_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(items));
-    fs.renameSync(tmp, DATA_FILE);
+    const tmp = STATE_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state));
+    fs.renameSync(tmp, STATE_FILE);
   } catch (e) {
-    console.error('할 일 저장 실패:', e.message);
+    console.error('저장 실패:', e.message);
   }
 }
-loadItems();
+// 통계처럼 자주 바뀌는 값은 모아서 저장
+function saveSoon() { if (!saveTimer) saveTimer = setTimeout(saveNow, 1000); }
+loadState();
+
+/* ---------- 통계 (한국 시간 기준 하루 단위) ---------- */
+const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
+const today = () => dayFmt.format(new Date());
+let seenSet = new Set();
+function dayStats(day = today()) {
+  const days = state.stats.days;
+  if (!days[day]) {
+    days[day] = { visitors: 0, views: 0, captcha: 0, checks: 0 };
+    const keys = Object.keys(days).sort();
+    while (keys.length > STATS_DAYS) delete days[keys.shift()];
+  }
+  if (state.stats.seen.day !== day) { state.stats.seen = { day, ids: [] }; seenSet = new Set(); }
+  return days[day];
+}
+seenSet = new Set(state.stats.seen.ids);
+function countView(visitorId) {
+  const s = dayStats();
+  s.views++;
+  const h = crypto.createHash('sha256').update(visitorId).digest('hex').slice(0, 16);
+  if (!seenSet.has(h) && seenSet.size < MAX_VISITORS_TRACKED) {
+    seenSet.add(h); state.stats.seen.ids.push(h); s.visitors++;
+  }
+  saveSoon();
+}
+function countEvent(kind) { dayStats()[kind]++; saveSoon(); }
 
 /* ---------- 관리자 인증 ---------- */
-const sessions = new Map(); // token -> 만료 시각
+const sessions = new Map();   // token -> 만료 시각
 const loginFails = new Map(); // ip -> { count, since }
 
 function sha256(s) { return crypto.createHash('sha256').update(String(s), 'utf8').digest(); }
@@ -94,7 +138,7 @@ function parseCookies(req) {
   const out = {};
   String(req.headers.cookie || '').split(';').forEach(p => {
     const i = p.indexOf('=');
-    if (i > 0) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+    if (i > 0) { try { out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); } catch {} }
   });
   return out;
 }
@@ -106,9 +150,9 @@ function isAdmin(req) {
   if (Date.now() > exp) { sessions.delete(token); return false; }
   return true;
 }
-function sessionCookie(req, token, maxAgeSec) {
+function cookie(req, name, value, maxAgeSec, httpOnly = true) {
   const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
-  return `admin_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSec}${secure}`;
+  return `${name}=${value}; ${httpOnly ? 'HttpOnly; ' : ''}SameSite=Strict; Path=/; Max-Age=${maxAgeSec}${secure}`;
 }
 setInterval(() => {
   const now = Date.now();
@@ -118,13 +162,8 @@ setInterval(() => {
 
 /* ---------- HTTP 도우미 ---------- */
 function send(res, status, data, headers = {}) {
-  const body = data === undefined ? '' : JSON.stringify(data);
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    ...headers,
-  });
-  res.end(body);
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.end(data === undefined ? '' : JSON.stringify(data));
 }
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -136,8 +175,10 @@ function readJson(req) {
     });
     req.on('end', () => {
       if (!chunks.length) return resolve({});
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-      catch { reject(Object.assign(new Error('bad json'), { status: 400 })); }
+      try {
+        const v = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        resolve(v && typeof v === 'object' ? v : {});
+      } catch { reject(Object.assign(new Error('bad json'), { status: 400 })); }
     });
     req.on('error', reject);
   });
@@ -148,55 +189,91 @@ function sameOrigin(req) {
   if (!origin) return true;
   try { return new URL(origin).host === req.headers.host; } catch { return false; }
 }
+const cleanText = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+function publicConfig(req) {
+  return {
+    notice: state.notice.on && state.notice.text ? { text: state.notice.text } : null,
+    event: state.event.openAt ? { title: state.event.title, openAt: state.event.openAt } : null,
+    lockChecklist: state.settings.lockChecklist,
+    isAdmin: isAdmin(req),
+  };
+}
+function adminSnapshot() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = dayFmt.format(new Date(Date.now() - i * 86400000));
+    days.push({ day: d, ...(state.stats.days[d] || { visitors: 0, views: 0, captcha: 0, checks: 0 }) });
+  }
+  return {
+    items: state.items,
+    notice: state.notice,
+    event: state.event,
+    settings: state.settings,
+    stats: { today: days[6], last7: days, done: state.items.filter(x => x.d).length },
+  };
+}
 
 /* ---------- API ---------- */
 async function handleApi(req, res, urlPath) {
   const m = req.method;
+  const admin = isAdmin(req);
   if (m !== 'GET' && m !== 'HEAD') {
     if (!sameOrigin(req)) return send(res, 403, { error: '허용되지 않은 출처의 요청입니다.' });
-    if (!String(req.headers['content-type'] || '').startsWith('application/json') && m !== 'DELETE') {
+    if (m !== 'DELETE' && !String(req.headers['content-type'] || '').startsWith('application/json')) {
       return send(res, 415, { error: 'JSON 형식으로 보내 주세요.' });
     }
   }
+  const needAdmin = () => send(res, 401, { error: '관리자 로그인이 필요해요.' });
+  const locked = () => send(res, 403, { error: '관리자가 체크리스트 편집을 잠갔어요.' });
 
-  // 공개 API: 할 일 목록
-  if (urlPath === '/api/items' && m === 'GET') return send(res, 200, items);
+  /* 공개 API */
+  if (urlPath === '/api/config' && m === 'GET') return send(res, 200, publicConfig(req));
+
+  if (urlPath === '/api/track' && m === 'POST') {
+    const { e } = await readJson(req);
+    if (e === 'captcha') countEvent('captcha');
+    return send(res, 204);
+  }
+
+  if (urlPath === '/api/items' && m === 'GET') return send(res, 200, state.items);
 
   if (urlPath === '/api/items' && m === 'POST') {
-    const { t } = await readJson(req);
-    const text = typeof t === 'string' ? t.trim() : '';
+    if (state.settings.lockChecklist && !admin) return locked();
+    const text = cleanText((await readJson(req)).t, MAX_TEXT);
     if (!text) return send(res, 400, { error: '내용을 입력해 주세요.' });
-    if (text.length > MAX_TEXT) return send(res, 400, { error: `${MAX_TEXT}자 이하로 입력해 주세요.` });
-    if (items.length >= MAX_ITEMS) return send(res, 400, { error: `항목은 ${MAX_ITEMS}개까지 만들 수 있어요.` });
+    if (state.items.length >= MAX_ITEMS) return send(res, 400, { error: `항목은 ${MAX_ITEMS}개까지 만들 수 있어요.` });
     const item = { id: newId(), t: text, d: false };
-    items.push(item); saveItems();
+    state.items.push(item); saveNow();
     return send(res, 201, item);
   }
 
   if (urlPath === '/api/items/uncheck-all' && m === 'POST') {
-    items.forEach(x => { x.d = false; }); saveItems();
-    return send(res, 200, items);
+    state.items.forEach(x => { x.d = false; }); saveNow();
+    return send(res, 200, state.items);
   }
 
   const one = urlPath.match(/^\/api\/items\/([0-9a-f]{12})$/);
   if (one) {
-    const item = items.find(x => x.id === one[1]);
+    const item = state.items.find(x => x.id === one[1]);
     if (!item) return send(res, 404, { error: '항목을 찾을 수 없어요.' });
     if (m === 'PATCH') {
       const { d } = await readJson(req);
       if (typeof d !== 'boolean') return send(res, 400, { error: 'd는 true 또는 false여야 해요.' });
-      item.d = d; saveItems();
+      if (d && !item.d) countEvent('checks');
+      item.d = d; saveNow();
       return send(res, 200, item);
     }
     if (m === 'DELETE') {
-      items = items.filter(x => x !== item); saveItems();
+      if (state.settings.lockChecklist && !admin) return locked();
+      state.items = state.items.filter(x => x !== item); saveNow();
       return send(res, 204);
     }
   }
 
-  // 관리자 API
+  /* 관리자 로그인 */
   if (urlPath === '/api/admin/me' && m === 'GET') {
-    return send(res, 200, { loggedIn: isAdmin(req), configured: Boolean(ADMIN_PASSWORD), count: isAdmin(req) ? items.length : undefined });
+    return send(res, 200, { loggedIn: admin, configured: Boolean(ADMIN_PASSWORD), ...(admin ? adminSnapshot() : {}) });
   }
 
   if (urlPath === '/api/admin/login' && m === 'POST') {
@@ -211,22 +288,76 @@ async function handleApi(req, res, urlPath) {
     loginFails.delete(ip);
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, Date.now() + SESSION_TTL_MS);
-    return send(res, 200, { loggedIn: true, count: items.length }, { 'Set-Cookie': sessionCookie(req, token, SESSION_TTL_MS / 1000) });
+    return send(res, 200, { loggedIn: true, ...adminSnapshot() }, { 'Set-Cookie': cookie(req, 'admin_session', token, SESSION_TTL_MS / 1000) });
   }
 
   if (urlPath === '/api/admin/logout' && m === 'POST') {
     const token = parseCookies(req).admin_session;
     if (token) sessions.delete(token);
-    return send(res, 200, { loggedIn: false }, { 'Set-Cookie': sessionCookie(req, '', 0) });
+    return send(res, 200, { loggedIn: false }, { 'Set-Cookie': cookie(req, 'admin_session', '', 0) });
+  }
+
+  /* 여기부터는 모두 관리자 전용 */
+  if (urlPath.startsWith('/api/admin/') && !admin) return needAdmin();
+
+  if (urlPath === '/api/admin/notice' && m === 'PUT') {
+    const b = await readJson(req);
+    state.notice = { text: cleanText(b.text, MAX_NOTICE), on: Boolean(b.on) };
+    saveNow(); return send(res, 200, state.notice);
+  }
+
+  if (urlPath === '/api/admin/event' && m === 'PUT') {
+    const b = await readJson(req);
+    let openAt = null;
+    if (b.openAt !== null && b.openAt !== undefined) {
+      openAt = Number(b.openAt);
+      if (!Number.isFinite(openAt) || openAt < 946684800000 || openAt > 4102444800000) {
+        return send(res, 400, { error: '오픈 일시가 올바르지 않아요.' });
+      }
+    }
+    state.event = { title: cleanText(b.title, MAX_TITLE), openAt };
+    saveNow(); return send(res, 200, state.event);
+  }
+
+  if (urlPath === '/api/admin/settings' && m === 'PUT') {
+    const b = await readJson(req);
+    if (typeof b.lockChecklist === 'boolean') state.settings.lockChecklist = b.lockChecklist;
+    saveNow(); return send(res, 200, state.settings);
   }
 
   if (urlPath === '/api/admin/items' && m === 'DELETE') {
-    if (!isAdmin(req)) return send(res, 401, { error: '관리자 로그인이 필요해요.' });
-    const removed = items.length;
-    items = []; saveItems();
+    const removed = state.items.length;
+    state.items = []; saveNow();
     console.log(`관리자가 할 일 ${removed}개를 모두 삭제함`);
-    return send(res, 200, { removed, count: 0 });
+    return send(res, 200, { removed, items: state.items });
   }
+
+  if (urlPath === '/api/admin/items/restore-defaults' && m === 'POST') {
+    state.items = defaultItems(); saveNow();
+    return send(res, 200, { items: state.items });
+  }
+
+  if (urlPath === '/api/admin/items/order' && m === 'PUT') {
+    const { ids } = await readJson(req);
+    if (!Array.isArray(ids)) return send(res, 400, { error: 'ids 목록이 필요해요.' });
+    const byId = new Map(state.items.map(x => [x.id, x]));
+    const ordered = ids.map(id => byId.get(id)).filter(Boolean);
+    const rest = state.items.filter(x => !ids.includes(x.id));
+    state.items = [...new Set([...ordered, ...rest])];
+    saveNow(); return send(res, 200, { items: state.items });
+  }
+
+  const editOne = urlPath.match(/^\/api\/admin\/items\/([0-9a-f]{12})$/);
+  if (editOne && m === 'PATCH') {
+    const item = state.items.find(x => x.id === editOne[1]);
+    if (!item) return send(res, 404, { error: '항목을 찾을 수 없어요.' });
+    const text = cleanText((await readJson(req)).t, MAX_TEXT);
+    if (!text) return send(res, 400, { error: '내용을 입력해 주세요.' });
+    item.t = text; saveNow();
+    return send(res, 200, item);
+  }
+
+  if (urlPath === '/api/admin/stats' && m === 'GET') return send(res, 200, adminSnapshot().stats);
 
   return send(res, 404, { error: '없는 주소예요.' });
 }
@@ -249,13 +380,23 @@ function serveStatic(req, res, urlPath) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('Not found');
     }
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
       // 시간 보정은 매 응답의 Date 헤더를 쓰므로 캐시를 막는다
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-    });
+    };
+    // 메인 화면 방문 집계 (익명 방문자 ID 쿠키)
+    if (rel === 'index.html' && req.method === 'GET') {
+      let vid = parseCookies(req).vid;
+      if (!vid || !/^[0-9a-f]{32}$/.test(vid)) {
+        vid = crypto.randomBytes(16).toString('hex');
+        headers['Set-Cookie'] = cookie(req, 'vid', vid, 365 * 86400);
+      }
+      countView(vid);
+    }
+    res.writeHead(200, headers);
     res.end(req.method === 'HEAD' ? undefined : data);
   });
 }
@@ -279,6 +420,10 @@ const server = http.createServer(async (req, res) => {
   }
   serveStatic(req, res, urlPath);
 });
+
+function shutdown() { saveNow(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); }
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`티켓팅 스탠바이 실행 중: http://localhost:${PORT}`);
