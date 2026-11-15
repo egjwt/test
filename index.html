@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>티켓팅 스탠바이</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one ticket-stub hero holding the countdown, then a 2x2 grid of prep tools */
+:root {
+  --bg: #f3f5fa;
+  --surface: #ffffff;
+  --fg: #141a2b;
+  --muted: #5d667d;
+  --line: #d9deea;
+  --accent: #2443c9;
+  --accent-soft: #e5eaff;
+  --hot: #d6342a;
+  --ok: #18815a;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1220; --surface: #171c2d; --fg: #e8ebf4; --muted: #98a1b8; --line: #2a3149;
+  --accent: #7d95ff; --accent-soft: #232c52; --hot: #ff6b5e; --ok: #4cc993; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1220; --surface: #171c2d; --fg: #e8ebf4; --muted: #98a1b8; --line: #2a3149;
+  --accent: #7d95ff; --accent-soft: #232c52; --hot: #ff6b5e; --ok: #4cc993; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 16px; margin: 0; text-wrap: balance; }
+a { color: var(--accent); }
+.sub { color: var(--muted); font-size: 13px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* ticket hero */
+.ticket {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 260px; position: relative; overflow: hidden;
+}
+.ticket .main { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ticket .stub {
+  padding: 24px 22px; border-left: 2px dashed var(--line); display: flex; flex-direction: column; gap: 12px;
+  background: var(--accent-soft);
+}
+.ticket::before, .ticket::after {
+  content: ""; position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--bg);
+  right: 249px; border: 1px solid var(--line);
+}
+.ticket::before { top: -12px; } .ticket::after { bottom: -12px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+.countdown { font-size: clamp(40px, 9vw, 84px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; }
+.countdown .cs { font-size: 0.5em; color: var(--muted); }
+.countdown.urgent, .countdown.urgent .cs { color: var(--hot); }
+.countdown.past { color: var(--ok); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.clock-now { font-size: 20px; }
+.chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip.on { border-color: var(--ok); color: var(--ok); }
+.chip.warn { border-color: var(--hot); color: var(--hot); }
+
+label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+input[type="datetime-local"], input[type="number"], input[type="text"] {
+  font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; width: 100%; min-width: 0;
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 8px; padding: 8px 14px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.primary.armed { background: var(--ok); border-color: var(--ok); }
+button.small { font-size: 12px; padding: 5px 10px; }
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.panel .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.result { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+.result:empty { display: none; }
+.checks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.checks li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.checks li:last-child { border-bottom: 0; }
+.checks input { margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.checks li.done span { color: var(--muted); text-decoration: line-through; }
+.checks span { flex: 1; min-width: 0; font-size: 14px; }
+.checks .del { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: 16px; }
+.progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.progress div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+
+.cap-box { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; border: 1px solid var(--line); }
+.cap-input { font-family: var(--font-num) !important; font-size: 22px !important; letter-spacing: 0.25em; text-transform: uppercase; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stats div { display: flex; flex-direction: column; }
+.stats b { font-family: var(--font-num); font-size: 18px; font-variant-numeric: tabular-nums; }
+.stats small { color: var(--muted); font-size: 12px; }
+.feedback { font-size: 14px; min-height: 1.5em; }
+.feedback.good { color: var(--ok); } .feedback.bad { color: var(--hot); }
+.toggles { display: flex; flex-wrap: wrap; gap: 14px; }
+.toggles label { flex-direction: row; align-items: center; gap: 6px; color: var(--fg); font-size: 14px; }
+.notice { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+#flash { position: fixed; inset: 0; background: var(--hot); z-index: 50; pointer-events: none; opacity: 0;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: clamp(36px, 10vw, 96px); font-weight: 700; }
+#flash.go { animation: flash 0.25s steps(1) 6; }
+@keyframes flash { 0% { opacity: 0.92; } 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #flash.go { animation: none; opacity: 0.9; } }
+
+@media (max-width: 760px) {
+  .ticket { grid-template-columns: minmax(0, 1fr); }
+  .ticket .stub { border-left: 0; border-top: 2px dashed var(--line); }
+  .ticket::before, .ticket::after { display: none; }
+  .ticket .main { padding: 20px; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>티켓팅 스탠바이</h1>
+    <span class="sub">직접 예매를 돕는 준비 도구 · <a href="https://ticket.melon.com" target="_blank" rel="noopener">멜론티켓 열기 ↗</a></span>
+  </header>
+
+  <section class="ticket" aria-label="오픈 카운트다운">
+    <div class="main">
+      <div class="eyebrow" id="cdLabel">예매 오픈까지</div>
+      <div class="countdown num" id="countdown">--:--:--<span class="cs">.--</span></div>
+      <div class="row">
+        <span class="sub">보정된 현재 시각</span>
+        <span class="clock-now num" id="nowClock">--:--:--.---</span>
+        <span class="chip" id="offsetChip">보정 없음</span>
+      </div>
+    </div>
+    <div class="stub">
+      <label for="target">오픈 일시 (내 기기 시간대)
+        <input type="datetime-local" id="target" step="1">
+      </label>
+      <div class="row">
+        <button class="small" data-quick="20:00:00">오늘/내일 20시</button>
+        <button class="small" data-quick="14:00:00">14시</button>
+        <button class="small" data-quick="18:00:00">18시</button>
+      </div>
+      <button class="primary" id="arm">알림 켜기</button>
+      <span class="sub" id="armState">소리는 버튼을 눌러야 재생할 수 있어요.</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="h-sync">
+      <div class="head"><h2 id="h-sync">시간 보정</h2><span class="chip" id="syncChip">미측정</span></div>
+      <p>내 기기 시계와 표준시의 차이를 측정해 카운트다운에 반영합니다. 서버 응답 시각을 20여 번 받아 오차 범위를 좁히는 방식이에요.</p>
+      <div class="row">
+        <button id="measure">자동 측정</button>
+        <button id="resetOffset" class="small">보정 초기화</button>
+      </div>
+      <div class="result" id="syncResult"></div>
+      <label for="manualOffset">수동 보정 (ms, +면 시계를 앞당김)
+        <div class="row" style="flex-wrap:nowrap">
+          <button class="small" data-adj="-100">−100</button>
+          <input type="number" id="manualOffset" step="10" value="0">
+          <button class="small" data-adj="100">+100</button>
+        </div>
+      </label>
+      <p>멜론 서버시간 확인 사이트에서 측정한 값과 다르면 수동으로 맞추세요. 대부분의 예매 서버는 표준시와 0.1초 안쪽으로 맞춰져 있습니다.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-alert">
+      <div class="head"><h2 id="h-alert">알림 설정</h2><span class="chip" id="alertChip">꺼짐</span></div>
+      <p>소리는 미리 예약되기 때문에 멜론티켓 탭을 보고 있어도 정확한 시각에 울립니다. 화면 깜빡임은 이 탭이 보일 때만 나타나니 두 창을 나란히 띄워 두세요.</p>
+      <label for="preSec">카운트 신호 시작 (오픈 몇 초 전부터 1초마다 삑)
+        <input type="number" id="preSec" min="0" max="30" value="5">
+      </label>
+      <div class="toggles">
+        <label><input type="checkbox" id="optSound" checked> 소리</label>
+        <label><input type="checkbox" id="optFlash" checked> 화면 깜빡임</label>
+        <label><input type="checkbox" id="optWake" checked> 화면 꺼짐 방지</label>
+      </div>
+      <div class="row"><button id="testAlert">알림 미리 듣기</button></div>
+      <div class="notice">팁: 오픈 정각 1~2초 전에 미리 클릭하면 "오픈 전" 페이지가 떠서 오히려 늦어질 수 있어요. 신호가 0에 닿는 순간 예매 버튼을 누르세요.</div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-check">
+      <div class="head"><h2 id="h-check">준비 체크리스트</h2><span class="sub num" id="checkCount">0/0</span></div>
+      <div class="progress"><div id="checkBar"></div></div>
+      <ul class="checks" id="checks"></ul>
+      <form class="row" id="addForm" style="flex-wrap:nowrap">
+        <input type="text" id="newItem" placeholder="항목 추가 (예: 2순위 구역 R석 B블록)">
+        <button type="submit">추가</button>
+      </form>
+      <div class="row"><button class="small" id="resetChecks">체크 모두 해제</button></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-cap">
+      <div class="head"><h2 id="h-cap">보안문자 연습</h2><span class="chip">영문 대문자</span></div>
+      <p>예매 단계에서 나오는 보안문자를 빨리 입력하는 연습입니다. 대소문자 구분 없이 입력하면 자동으로 대문자로 바뀝니다.</p>
+      <div class="cap-box">
+        <canvas id="cap" width="240" height="80" aria-label="보안문자 이미지"></canvas>
+        <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:140px">
+          <input type="text" id="capIn" class="cap-input" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="보안문자 입력">
+          <div class="row"><button class="primary" id="capGo">입력 완료</button><button id="capNew">새로고침</button></div>
+        </div>
+      </div>
+      <div class="feedback" id="capFb">Enter 키로 제출할 수 있어요.</div>
+      <div class="stats">
+        <div><b id="stTry">0</b><small>시도</small></div>
+        <div><b id="stAcc">-</b><small>정확도</small></div>
+        <div><b id="stAvg">-</b><small>평균 시간</small></div>
+        <div><b id="stBest">-</b><small>최고 기록</small></div>
+      </div>
+      <div class="row">
+        <label for="capLen" style="flex-direction:row;align-items:center;gap:8px">글자 수
+          <input type="number" id="capLen" min="4" max="8" value="6" style="width:70px">
+        </label>
+        <button class="small" id="capReset">기록 초기화</button>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="flash" aria-hidden="true">지금!</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('tsb:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('tsb:' + k, JSON.stringify(v)); } catch {} }
+  };
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+  /* ---------- time & target ---------- */
+  let offset = store.get('offset', 0);
+  const now = () => Date.now() + offset;
+
+  function nextAt(hms) {
+    const [h, m, s] = hms.split(':').map(Number);
+    const d = new Date(now()); d.setHours(h, m, s, 0);
+    if (d.getTime() <= now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  let target = store.get('target', null);
+  if (!target) target = nextAt('20:00:00');
+
+  function toLocalInput(ms) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  const targetIn = $('#target');
+  targetIn.value = toLocalInput(target);
+  function setTarget(ms) { target = ms; store.set('target', ms); targetIn.value = toLocalInput(ms); fired = false; schedule(); }
+  targetIn.addEventListener('change', () => { const t = new Date(targetIn.value).getTime(); if (!isNaN(t)) setTarget(t); });
+  document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => setTarget(nextAt(b.dataset.quick))));
+
+  function setOffset(ms, label) {
+    offset = Math.round(ms); store.set('offset', offset);
+    $('#manualOffset').value = offset;
+    const chip = $('#offsetChip');
+    if (offset === 0) { chip.textContent = '보정 없음'; chip.className = 'chip'; }
+    else { chip.textContent = `보정 ${offset > 0 ? '+' : ''}${(offset/1000).toFixed(3)}초`; chip.className = 'chip on'; }
+    if (label) { $('#syncChip').textContent = label; }
+    schedule();
+  }
+  setOffset(offset);
+  $('#manualOffset').addEventListener('change', e => setOffset(Number(e.target.value) || 0, '수동'));
+  document.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => setOffset(offset + Number(b.dataset.adj), '수동')));
+  $('#resetOffset').addEventListener('click', () => { setOffset(0, '미측정'); $('#syncResult').textContent = ''; $('#syncChip').className = 'chip'; });
+
+  /* ---------- auto sync via server Date header ---------- */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  $('#measure').addEventListener('click', async () => {
+    const btn = $('#measure'), out = $('#syncResult');
+    btn.disabled = true; out.textContent = '측정 중… (약 5초)';
+    try {
+      let lo = -Infinity, hi = Infinity, got = 0;
+      for (let i = 0; i < 22; i++) {
+        const t0 = Date.now();
+        const r = await fetch('sync.txt?n=' + Math.random().toString(36).slice(2), { cache: 'no-store' });
+        const t1 = Date.now();
+        const h = r.headers.get('date');
+        if (!h) throw new Error('nodate');
+        const S = Date.parse(h);
+        if (isNaN(S)) throw new Error('nodate');
+        lo = Math.max(lo, S - t1); hi = Math.min(hi, S + 1000 - t0); got++;
+        out.textContent = `측정 중… ${got}/22`;
+        await sleep(90 + Math.random() * 160);
+      }
+      if (lo > hi) throw new Error('inconsistent');
+      const est = (lo + hi) / 2, err = (hi - lo) / 2;
+      setOffset(est, err < 150 ? '측정됨' : '측정됨(오차 큼)');
+      $('#syncChip').className = err < 150 ? 'chip on' : 'chip warn';
+      const abs = Math.abs(est) / 1000;
+      out.textContent = Math.abs(est) < 20
+        ? `내 시계가 표준시와 거의 같습니다 (오차 ±${(err/1000).toFixed(3)}초).`
+        : `내 시계가 표준시보다 ${abs.toFixed(3)}초 ${est > 0 ? '느립니다' : '빠릅니다'} (오차 ±${(err/1000).toFixed(3)}초). 카운트다운에 반영했어요.`;
+    } catch (e) {
+      out.textContent = '자동 측정을 할 수 없는 환경이에요. 서버시간 확인 사이트의 값을 보고 아래에 수동으로 입력해 주세요.';
+      $('#syncChip').textContent = '측정 실패'; $('#syncChip').className = 'chip warn';
+    } finally { btn.disabled = false; }
+  });
+
+  /* ---------- alerts ---------- */
+  let ctx = null, nodes = [], armed = false, fired = false, wake = null;
+  const preIn = $('#preSec'), optSound = $('#optSound'), optFlash = $('#optFlash'), optWake = $('#optWake');
+  preIn.value = store.get('pre', 5); optSound.checked = store.get('sound', true); optFlash.checked = store.get('flash', true); optWake.checked = store.get('wake', true);
+  const pre = () => Math.max(0, Math.min(30, Number(preIn.value) || 0));
+
+  function tone(at, freq, dur) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(0.35, at + 0.01);
+    g.gain.setValueAtTime(0.35, at + dur - 0.03); g.gain.linearRampToValueAtTime(0, at + dur);
+    o.connect(g).connect(ctx.destination); o.start(at); o.stop(at + dur + 0.02); nodes.push(o);
+  }
+  function schedule() {
+    nodes.forEach(o => { try { o.stop(); } catch {} }); nodes = [];
+    if (!armed || !ctx || !optSound.checked) return;
+    const base = ctx.currentTime + (target - now()) / 1000;
+    for (let s = pre(); s >= 1; s--) if (base - s > ctx.currentTime) tone(base - s, 880, 0.12);
+    if (base > ctx.currentTime) tone(base, 1320, 0.7);
+  }
+  setInterval(() => { if (armed && target - now() > (pre() + 3) * 1000) schedule(); }, 30000);
+
+  async function getWake() {
+    if (!optWake.checked || !('wakeLock' in navigator)) return;
+    try { wake = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  document.addEventListener('visibilitychange', () => { if (armed && document.visibilityState === 'visible') getWake(); });
+
+  function updateArmUi() {
+    const b = $('#arm');
+    b.textContent = armed ? '알림 켜짐 · 끄기' : '알림 켜기';
+    b.classList.toggle('armed', armed);
+    $('#armState').textContent = armed ? '정각에 신호가 울립니다. 이 탭을 닫지 마세요.' : '소리는 버튼을 눌러야 재생할 수 있어요.';
+    $('#alertChip').textContent = armed ? '켜짐' : '꺼짐';
+    $('#alertChip').className = armed ? 'chip on' : 'chip';
+  }
+  function ensureCtx() {
+    if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) ctx = new AC(); }
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+  $('#arm').addEventListener('click', () => {
+    armed = !armed;
+    if (armed) { ensureCtx(); getWake(); fired = target <= now(); }
+    else if (wake) { wake.release().catch(() => {}); wake = null; }
+    schedule(); updateArmUi();
+  });
+  [preIn, optSound, optFlash, optWake].forEach(el => el.addEventListener('change', () => {
+    store.set('pre', pre()); store.set('sound', optSound.checked); store.set('flash', optFlash.checked); store.set('wake', optWake.checked);
+    schedule();
+  }));
+  function flash() {
+    const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+    setTimeout(() => f.classList.remove('go'), 1600);
+  }
+  $('#testAlert').addEventListener('click', () => {
+    ensureCtx();
+    if (ctx && optSound.checked) { const t = ctx.currentTime + 0.05; tone(t, 880, 0.12); tone(t + 0.5, 880, 0.12); tone(t + 1, 1320, 0.7); }
+    if (optFlash.checked) setTimeout(flash, 1000);
+  });
+
+  /* ---------- render loop ---------- */
+  const cdEl = $('#countdown'), nowEl = $('#nowClock'), cdLabel = $('#cdLabel');
+  function fmtDur(ms) {
+    const t = Math.floor(ms / 10), cs = t % 100, s = Math.floor(t / 100) % 60, m = Math.floor(t / 6000) % 60, h = Math.floor(t / 360000) % 24, d = Math.floor(t / 8640000);
+    return `${d > 0 ? d + '일 ' : ''}${pad(h)}:${pad(m)}:${pad(s)}<span class="cs">.${pad(cs)}</span>`;
+  }
+  let lastRem = target - now();
+  function frame() {
+    const n = now(), rem = target - n;
+    const d = new Date(n);
+    nowEl.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+    if (rem > 0) {
+      cdEl.innerHTML = fmtDur(rem); cdLabel.textContent = '예매 오픈까지';
+      cdEl.className = 'countdown num' + (rem <= Math.max(pre(), 3) * 1000 + 999 ? ' urgent' : '');
+    } else {
+      cdEl.innerHTML = '+' + fmtDur(-rem); cdLabel.textContent = '오픈 후 경과 · 지금 예매하세요';
+      cdEl.className = 'countdown num past';
+      if (!fired && lastRem > 0 && rem > -3000) { fired = true; if (armed && optFlash.checked) flash(); }
+    }
+    lastRem = rem;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ---------- checklist ---------- */
+  const defaults = [
+    '멜론 계정 로그인 확인 (오픈 10분 전 다시 로그인)',
+    '본인인증·회원정보 확인 (본인인증 필수 공연 대비)',
+    '결제수단 정하기 · 카드사 앱 로그인 해두기',
+    '공연 상세 페이지 미리 열어두기',
+    '관람일·회차·매수 정하기',
+    '좌석 1·2·3순위 구역 정하기',
+    '브라우저 팝업 차단 해제',
+    '유선 인터넷 또는 안정적인 와이파이 연결',
+    '불필요한 탭·프로그램 닫기',
+    '보안문자 연습 3회 이상',
+    '대기열 진입 후 새로고침하지 않기',
+  ];
+  let items = store.get('items', null) || defaults.map(t => ({ t, d: false }));
+  function renderChecks() {
+    const ul = $('#checks'); ul.innerHTML = '';
+    items.forEach((it, i) => {
+      const li = document.createElement('li'); if (it.d) li.className = 'done';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.d; cb.id = 'ck' + i;
+      cb.addEventListener('change', () => { it.d = cb.checked; save(); });
+      const sp = document.createElement('span'); sp.textContent = it.t;
+      sp.addEventListener('click', () => { cb.checked = !cb.checked; it.d = cb.checked; save(); });
+      const del = document.createElement('button'); del.className = 'del'; del.type = 'button'; del.textContent = '×'; del.setAttribute('aria-label', '삭제');
+      del.addEventListener('click', () => { items.splice(i, 1); save(); });
+      li.append(cb, sp, del); ul.append(li);
+    });
+    const done = items.filter(x => x.d).length;
+    $('#checkCount').textContent = `${done}/${items.length}`;
+    $('#checkBar').style.width = items.length ? (done / items.length * 100) + '%' : '0';
+  }
+  function save() { store.set('items', items); renderChecks(); }
+  $('#addForm').addEventListener('submit', e => {
+    e.preventDefault(); const v = $('#newItem').value.trim(); if (!v) return;
+    items.push({ t: v, d: false }); $('#newItem').value = ''; save();
+  });
+  $('#resetChecks').addEventListener('click', () => { items.forEach(x => x.d = false); save(); });
+  renderChecks();
+
+  /* ---------- captcha practice ---------- */
+  const cv = $('#cap'), cx = cv.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.width = 240 * dpr; cv.height = 80 * dpr; cx.scale(dpr, dpr);
+  const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let answer = '', shownAt = 0;
+  let stats = store.get('cap', { n: 0, ok: 0, times: [], best: null });
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  function newCap() {
+    const len = Math.max(4, Math.min(8, Number($('#capLen').value) || 6));
+    answer = Array.from({ length: len }, () => L[Math.floor(Math.random() * 26)]).join('');
+    cx.fillStyle = '#f4f2ec'; cx.fillRect(0, 0, 240, 80);
+    for (let i = 0; i < 160; i++) { cx.fillStyle = `rgba(60,60,80,${rnd(.1,.35)})`; cx.fillRect(rnd(0,240), rnd(0,80), 1.4, 1.4); }
+    const step = 210 / len;
+    for (let i = 0; i < len; i++) {
+      cx.save();
+      cx.translate(16 + step * i + step / 2 + rnd(-3, 3), 46 + rnd(-6, 6));
+      cx.rotate(rnd(-0.45, 0.45)); cx.transform(1, 0, rnd(-0.3, 0.3), 1, 0, 0);
+      cx.font = `700 ${Math.round(rnd(30, 38))}px "JetBrains Mono", monospace`;
+      cx.fillStyle = `hsl(${rnd(200, 260)}, ${rnd(20, 50)}%, ${rnd(18, 32)}%)`;
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(answer[i], 0, 0); cx.restore();
+    }
+    for (let i = 0; i < 3; i++) {
+      cx.strokeStyle = `rgba(40,40,70,${rnd(.35,.6)})`; cx.lineWidth = rnd(1.2, 2.2);
+      cx.beginPath(); cx.moveTo(0, rnd(10, 70));
+      cx.bezierCurveTo(rnd(40, 100), rnd(0, 80), rnd(140, 200), rnd(0, 80), 240, rnd(10, 70)); cx.stroke();
+    }
+    $('#capIn').value = ''; $('#capIn').maxLength = len; shownAt = performance.now();
+  }
+  function renderStats() {
+    $('#stTry').textContent = stats.n;
+    $('#stAcc').textContent = stats.n ? Math.round(stats.ok / stats.n * 100) + '%' : '-';
+    const ts = stats.times.slice(-20);
+    $('#stAvg').textContent = ts.length ? (ts.reduce((a, b) => a + b, 0) / ts.length / 1000).toFixed(2) + '초' : '-';
+    $('#stBest').textContent = stats.best != null ? (stats.best / 1000).toFixed(2) + '초' : '-';
+  }
+  function submitCap() {
+    const v = $('#capIn').value.trim().toUpperCase(); if (!v) return;
+    const t = performance.now() - shownAt, fb = $('#capFb');
+    stats.n++;
+    if (v === answer) {
+      stats.ok++; stats.times.push(t); stats.times = stats.times.slice(-50);
+      const isBest = stats.best == null || t < stats.best; if (isBest) stats.best = t;
+      fb.className = 'feedback good'; fb.textContent = `정답 · ${(t/1000).toFixed(2)}초${isBest ? ' · 최고 기록!' : ''}`;
+    } else {
+      fb.className = 'feedback bad'; fb.textContent = `오답 · 정답은 ${answer} (입력: ${v})`;
+    }
+    store.set('cap', stats); renderStats(); newCap(); $('#capIn').focus();
+  }
+  $('#capIn').addEventListener('input', e => { const p = e.target.selectionStart; e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); try { e.target.setSelectionRange(p, p); } catch {} });
+  $('#capIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitCap(); } });
+  $('#capGo').addEventListener('click', submitCap);
+  $('#capNew').addEventListener('click', () => { newCap(); $('#capIn').focus(); });
+  $('#capLen').addEventListener('change', newCap);
+  $('#capReset').addEventListener('click', () => { stats = { n: 0, ok: 0, times: [], best: null }; store.set('cap', stats); renderStats(); $('#capFb').className = 'feedback'; $('#capFb').textContent = '기록을 초기화했어요.'; });
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(newCap);
+  newCap(); renderStats();
+})();
+</script>
+</body>
+</html>
