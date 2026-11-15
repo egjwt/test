@@ -398,7 +398,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
   }
   requestAnimationFrame(frame);
 
-  /* ---------- checklist ---------- */
+  /* ---------- checklist (server-backed, falls back to this browser) ---------- */
   const defaults = [
     '멜론 계정 로그인 확인 (오픈 10분 전 다시 로그인)',
     '본인인증·회원정보 확인 (본인인증 필수 공연 대비)',
@@ -412,30 +412,68 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     '보안문자 연습 3회 이상',
     '대기열 진입 후 새로고침하지 않기',
   ];
-  let items = store.get('items', null) || defaults.map(t => ({ t, d: false }));
+  let items = [];
+  let remote = false;
+  async function api(method, url, body) {
+    const r = await fetch(url, {
+      method, cache: 'no-store',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.status === 204 ? null : r.json();
+  }
+  function saveLocal() { if (!remote) store.set('items', items); }
+  async function act(fn) {
+    try { await fn(); } catch { if (remote) await loadItems(); }
+    saveLocal(); renderChecks();
+  }
+  async function loadItems() {
+    try { items = await api('GET', 'api/items'); remote = true; }
+    catch {
+      remote = false;
+      items = store.get('items', null) || defaults.map((t, i) => ({ id: 'l' + i, t, d: false }));
+      items.forEach((it, i) => { if (!it.id) it.id = 'l' + i + '_' + Date.now(); });
+    }
+    renderChecks();
+  }
   function renderChecks() {
     const ul = $('#checks'); ul.innerHTML = '';
-    items.forEach((it, i) => {
+    if (!items.length) {
+      const li = document.createElement('li'); li.innerHTML = '<span class="sub">항목이 없어요. 아래에서 추가해 주세요.</span>'; ul.append(li);
+    }
+    items.forEach(it => {
       const li = document.createElement('li'); if (it.d) li.className = 'done';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.d; cb.id = 'ck' + i;
-      cb.addEventListener('change', () => { it.d = cb.checked; save(); });
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.d; cb.id = 'ck-' + it.id;
+      const toggle = v => act(async () => { it.d = v; if (remote) await api('PATCH', 'api/items/' + encodeURIComponent(it.id), { d: v }); });
+      cb.addEventListener('change', () => toggle(cb.checked));
       const sp = document.createElement('span'); sp.textContent = it.t;
-      sp.addEventListener('click', () => { cb.checked = !cb.checked; it.d = cb.checked; save(); });
+      sp.addEventListener('click', () => toggle(!it.d));
       const del = document.createElement('button'); del.className = 'del'; del.type = 'button'; del.textContent = '×'; del.setAttribute('aria-label', '삭제');
-      del.addEventListener('click', () => { items.splice(i, 1); save(); });
+      del.addEventListener('click', () => act(async () => {
+        items = items.filter(x => x !== it);
+        if (remote) await api('DELETE', 'api/items/' + encodeURIComponent(it.id));
+      }));
       li.append(cb, sp, del); ul.append(li);
     });
     const done = items.filter(x => x.d).length;
     $('#checkCount').textContent = `${done}/${items.length}`;
     $('#checkBar').style.width = items.length ? (done / items.length * 100) + '%' : '0';
   }
-  function save() { store.set('items', items); renderChecks(); }
   $('#addForm').addEventListener('submit', e => {
     e.preventDefault(); const v = $('#newItem').value.trim(); if (!v) return;
-    items.push({ t: v, d: false }); $('#newItem').value = ''; save();
+    $('#newItem').value = '';
+    act(async () => {
+      if (remote) items.push(await api('POST', 'api/items', { t: v }));
+      else items.push({ id: 'l' + Date.now(), t: v, d: false });
+    });
   });
-  $('#resetChecks').addEventListener('click', () => { items.forEach(x => x.d = false); save(); });
-  renderChecks();
+  $('#resetChecks').addEventListener('click', () => act(async () => {
+    items.forEach(x => x.d = false);
+    if (remote) items = await api('POST', 'api/items/uncheck-all');
+  }));
+  loadItems();
+  setInterval(() => { if (remote && document.visibilityState === 'visible') loadItems(); }, 15000);
 
   /* ---------- captcha practice ---------- */
   const cv = $('#cap'), cx = cv.getContext('2d');

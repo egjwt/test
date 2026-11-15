@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>스탠바이 관리자</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a single narrow control card, centered column */
+:root {
+  --bg: #f3f5fa; --surface: #ffffff; --fg: #141a2b; --muted: #5d667d; --line: #d9deea;
+  --accent: #2443c9; --accent-soft: #e5eaff; --hot: #d6342a; --hot-soft: #fde9e7; --ok: #18815a;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1220; --surface: #171c2d; --fg: #e8ebf4; --muted: #98a1b8; --line: #2a3149;
+  --accent: #7d95ff; --accent-soft: #232c52; --hot: #ff6b5e; --hot-soft: #3a1d22; --ok: #4cc993; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1220; --surface: #171c2d; --fg: #e8ebf4; --muted: #98a1b8; --line: #2a3149;
+  --accent: #7d95ff; --accent-soft: #232c52; --hot: #ff6b5e; --hot-soft: #3a1d22; --ok: #4cc993; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 48px;
+}
+.wrap { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; }
+a { color: var(--accent); }
+.sub { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+input {
+  font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; width: 100%;
+}
+button {
+  font: inherit; font-weight: 500; cursor: pointer; border-radius: 8px; padding: 10px 16px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.55; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.danger { background: var(--hot); border-color: var(--hot); color: var(--surface); }
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.stat { display: flex; align-items: baseline; gap: 8px; }
+.stat b { font-family: var(--font-num); font-size: 36px; font-variant-numeric: tabular-nums; line-height: 1; }
+.msg { font-size: 14px; min-height: 1.5em; margin: 0; }
+.msg.err { color: var(--hot); } .msg.ok { color: var(--ok); }
+.confirm { background: var(--hot-soft); border: 1px solid var(--hot); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.confirm p { margin: 0; font-size: 14px; }
+.badge { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--ok); color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>스탠바이 관리자</h1>
+    <a class="sub" href="/">← 메인 화면</a>
+  </header>
+
+  <section class="card" id="loginCard" hidden>
+    <form id="loginForm" style="display:flex;flex-direction:column;gap:14px">
+      <label for="pw">관리자 비밀번호
+        <input type="password" id="pw" autocomplete="current-password" required>
+      </label>
+      <button class="primary" type="submit" id="loginBtn">로그인</button>
+    </form>
+    <p class="msg" id="loginMsg"></p>
+  </section>
+
+  <section class="card" id="adminCard" hidden>
+    <div class="row" style="justify-content:space-between">
+      <span class="badge">관리자 로그인됨</span>
+      <button type="button" id="logoutBtn">로그아웃</button>
+    </div>
+    <div>
+      <div class="sub">현재 준비 체크리스트 항목</div>
+      <div class="stat"><b id="count">-</b><span class="sub">개</span></div>
+    </div>
+    <button class="danger" type="button" id="clearBtn">할 일 전부 삭제</button>
+    <div class="confirm" id="confirmBox" hidden>
+      <p>체크리스트 항목 <strong id="confirmCount">0</strong>개를 모두 지웁니다. 되돌릴 수 없어요.</p>
+      <div class="row">
+        <button class="danger" type="button" id="confirmYes">삭제</button>
+        <button type="button" id="confirmNo">취소</button>
+      </div>
+    </div>
+    <p class="msg" id="adminMsg"></p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  async function api(method, url, body) {
+    const r = await fetch(url, {
+      method, cache: 'no-store', credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = null; try { data = await r.json(); } catch {}
+    if (!r.ok) throw Object.assign(new Error((data && data.error) || '요청이 실패했어요.'), { status: r.status });
+    return data;
+  }
+  function msg(el, text, kind) { el.textContent = text; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+  function showLogin(text, kind) {
+    $('#adminCard').hidden = true; $('#loginCard').hidden = false;
+    msg($('#loginMsg'), text || '', kind); $('#pw').focus();
+  }
+  function showAdmin(count) {
+    $('#loginCard').hidden = true; $('#adminCard').hidden = false;
+    $('#count').textContent = count; $('#confirmBox').hidden = true;
+  }
+
+  async function init() {
+    try {
+      const me = await api('GET', '/api/admin/me');
+      if (!me.configured) {
+        showLogin('서버에 ADMIN_PASSWORD 환경변수가 없어서 로그인할 수 없어요. Railway Variables에 추가해 주세요.', 'err');
+        $('#loginBtn').disabled = true; return;
+      }
+      if (me.loggedIn) showAdmin(me.count); else showLogin();
+    } catch (e) { showLogin('서버에 연결하지 못했어요. 잠시 뒤 새로고침해 주세요.', 'err'); }
+  }
+
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = $('#loginBtn'); btn.disabled = true;
+    try {
+      const r = await api('POST', '/api/admin/login', { password: $('#pw').value });
+      $('#pw').value = ''; showAdmin(r.count);
+    } catch (err) { msg($('#loginMsg'), err.message, 'err'); $('#pw').select(); }
+    finally { btn.disabled = false; }
+  });
+
+  $('#logoutBtn').addEventListener('click', async () => {
+    try { await api('POST', '/api/admin/logout', {}); } catch {}
+    showLogin('로그아웃했어요.', 'ok');
+  });
+
+  $('#clearBtn').addEventListener('click', () => {
+    $('#confirmCount').textContent = $('#count').textContent;
+    $('#confirmBox').hidden = false; $('#confirmNo').focus();
+  });
+  $('#confirmNo').addEventListener('click', () => { $('#confirmBox').hidden = true; });
+  $('#confirmYes').addEventListener('click', async () => {
+    const btn = $('#confirmYes'); btn.disabled = true;
+    try {
+      const r = await fetch('/api/admin/items', { method: 'DELETE', credentials: 'same-origin', cache: 'no-store' });
+      const data = await r.json().catch(() => null);
+      if (r.status === 401) return showLogin('로그인이 만료됐어요. 다시 로그인해 주세요.', 'err');
+      if (!r.ok) throw new Error((data && data.error) || '삭제하지 못했어요.');
+      showAdmin(data.count); msg($('#adminMsg'), `할 일 ${data.removed}개를 모두 삭제했어요.`, 'ok');
+    } catch (err) { msg($('#adminMsg'), err.message, 'err'); }
+    finally { btn.disabled = false; }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
