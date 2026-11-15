@@ -10,12 +10,29 @@
 - **준비 체크리스트**: 기본 항목 제공, 추가·삭제 가능 (브라우저에 저장)
 - **보안문자 연습**: 영문 대문자 이미지 입력 연습, 정확도·평균·최고 기록 표시
 
-## 실행
+## 로컬 실행
 
-`index.html`과 `sync.txt`를 같은 폴더에 두고 웹 서버로 열어야 자동 시간 보정이 작동합니다.
+Node.js 18 이상이 필요합니다. 외부 패키지는 쓰지 않습니다.
 
 ```bash
-python3 -m http.server 8000
+npm start
 ```
 
-그다음 브라우저에서 http://localhost:8000 을 엽니다. 파일을 더블클릭해서 열면 자동 보정 대신 수동 보정만 사용할 수 있습니다.
+브라우저에서 http://localhost:3000 을 엽니다.
+
+## Railway 배포
+
+1. [Railway](https://railway.com)에 로그인하고 **New Project → Deploy from GitHub repo**를 고릅니다.
+2. 이 저장소와 브랜치를 선택합니다.
+3. 배포가 끝나면 서비스의 **Settings → Networking → Generate Domain**으로 공개 주소를 만듭니다.
+
+포트는 Railway가 넣어 주는 `PORT` 환경 변수를 그대로 씁니다. 상태 확인 경로는 `/health`입니다.
+
+## 구조
+
+```
+public/index.html   페이지 본체
+public/sync.txt     시간 보정용 파일 (서버 응답의 Date 헤더를 읽음)
+server.js           정적 파일 서버 (캐시 비활성화)
+railway.json        Railway 배포 설정
+```

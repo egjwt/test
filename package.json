@@ -1,0 +1,13 @@
+{
+  "name": "ticketing-standby",
+  "version": "1.0.0",
+  "description": "티켓 예매 오픈을 직접 준비하는 카운트다운·알림·연습 도구",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
