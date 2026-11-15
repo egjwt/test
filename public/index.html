@@ -246,6 +246,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
 
   /* ---------- time & target ---------- */
   let offset = store.get('offset', 0);
+  let ctx = null, nodes = [], armed = false, fired = false, wake = null;
   const now = () => Date.now() + offset;
 
   function nextAt(hms) {
@@ -315,7 +316,6 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
   });
 
   /* ---------- alerts ---------- */
-  let ctx = null, nodes = [], armed = false, fired = false, wake = null;
   const preIn = $('#preSec'), optSound = $('#optSound'), optFlash = $('#optFlash'), optWake = $('#optWake');
   preIn.value = store.get('pre', 5); optSound.checked = store.get('sound', true); optFlash.checked = store.get('flash', true); optWake.checked = store.get('wake', true);
   const pre = () => Math.max(0, Math.min(30, Number(preIn.value) || 0));
