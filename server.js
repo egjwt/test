@@ -45,6 +45,15 @@ const DEFAULT_ITEMS = [
   '대기열 진입 후 새로고침하지 않기',
 ];
 
+const DEFAULT_LINKS = [
+  { name: '멜론티켓', url: 'https://ticket.melon.com' },
+  { name: 'YES24 티켓', url: 'https://ticket.yes24.com' },
+  { name: 'NOL 티켓', url: 'https://tickets.interpark.com' },
+  { name: '티켓링크', url: 'https://www.ticketlink.co.kr' },
+];
+const MAX_LINKS = 12;
+const EMPTY_DAY = () => ({ visitors: 0, views: 0, captcha: 0, seat: 0, checks: 0 });
+
 /* ---------- 저장소 (JSON 파일 하나) ---------- */
 const newId = () => crypto.randomBytes(6).toString('hex');
 const defaultItems = () => DEFAULT_ITEMS.map(t => ({ id: newId(), t, d: false }));
@@ -62,6 +71,7 @@ function loadState() {
   state.notice = state.notice || { text: '', on: false };
   state.event = state.event || { title: '', openAt: null };
   state.settings = state.settings || { lockChecklist: false };
+  if (!Array.isArray(state.links)) state.links = DEFAULT_LINKS.map(l => ({ ...l }));
   state.stats = state.stats || { days: {}, seen: { day: '', ids: [] } };
   saveNow();
 }
@@ -89,7 +99,7 @@ let seenSet = new Set();
 function dayStats(day = today()) {
   const days = state.stats.days;
   if (!days[day]) {
-    days[day] = { visitors: 0, views: 0, captcha: 0, checks: 0 };
+    days[day] = EMPTY_DAY();
     const keys = Object.keys(days).sort();
     while (keys.length > STATS_DAYS) delete days[keys.shift()];
   }
@@ -106,7 +116,7 @@ function countView(visitorId) {
   }
   saveSoon();
 }
-function countEvent(kind) { dayStats()[kind]++; saveSoon(); }
+function countEvent(kind) { const s = dayStats(); s[kind] = (s[kind] || 0) + 1; saveSoon(); }
 
 /* ---------- 관리자 인증 ---------- */
 const sessions = new Map();   // token -> 만료 시각
@@ -196,6 +206,7 @@ function publicConfig(req) {
     notice: state.notice.on && state.notice.text ? { text: state.notice.text } : null,
     event: state.event.openAt ? { title: state.event.title, openAt: state.event.openAt } : null,
     lockChecklist: state.settings.lockChecklist,
+    links: state.links,
     isAdmin: isAdmin(req),
   };
 }
@@ -203,13 +214,14 @@ function adminSnapshot() {
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = dayFmt.format(new Date(Date.now() - i * 86400000));
-    days.push({ day: d, ...(state.stats.days[d] || { visitors: 0, views: 0, captcha: 0, checks: 0 }) });
+    days.push({ day: d, ...EMPTY_DAY(), ...(state.stats.days[d] || {}) });
   }
   return {
     items: state.items,
     notice: state.notice,
     event: state.event,
     settings: state.settings,
+    links: state.links,
     stats: { today: days[6], last7: days, done: state.items.filter(x => x.d).length },
   };
 }
@@ -232,7 +244,7 @@ async function handleApi(req, res, urlPath) {
 
   if (urlPath === '/api/track' && m === 'POST') {
     const { e } = await readJson(req);
-    if (e === 'captcha') countEvent('captcha');
+    if (e === 'captcha' || e === 'seat') countEvent(e);
     return send(res, 204);
   }
 
@@ -317,6 +329,27 @@ async function handleApi(req, res, urlPath) {
     }
     state.event = { title: cleanText(b.title, MAX_TITLE), openAt };
     saveNow(); return send(res, 200, state.event);
+  }
+
+  if (urlPath === '/api/admin/links' && m === 'PUT') {
+    const { links } = await readJson(req);
+    if (!Array.isArray(links)) return send(res, 400, { error: 'links 목록이 필요해요.' });
+    if (links.length > MAX_LINKS) return send(res, 400, { error: `링크는 ${MAX_LINKS}개까지 넣을 수 있어요.` });
+    const clean = [];
+    for (const [i, l] of links.entries()) {
+      const name = cleanText(l && l.name, 20);
+      const raw = typeof (l && l.url) === 'string' ? l.url.trim() : '';
+      let url;
+      try { url = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); } catch {}
+      if (!name) return send(res, 400, { error: `${i + 1}번째 링크의 이름을 입력해 주세요.` });
+      // 자바스크립트 링크 등은 막고 http/https 주소만 허용
+      if (!url || !/^https?:$/.test(url.protocol) || !url.hostname.includes('.') || url.href.length > 300) {
+        return send(res, 400, { error: `${name}: 주소가 올바르지 않아요. https://로 시작하는 주소를 넣어 주세요.` });
+      }
+      clean.push({ name, url: url.href });
+    }
+    state.links = clean; saveNow();
+    return send(res, 200, { links: state.links });
   }
 
   if (urlPath === '/api/admin/settings' && m === 'PUT') {

@@ -64,7 +64,8 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
 .badge { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--ok); color: var(--ok); }
 .badge.off { border-color: var(--line); color: var(--muted); }
 
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.links li input[type="text"]:first-child { flex: 0 0 34%; }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat b { font-family: var(--font-num); font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .stat small { color: var(--muted); font-size: 12.5px; }
@@ -122,12 +123,13 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
         <div class="stat"><b id="stVisitors">0</b><small>오늘 방문자</small></div>
         <div class="stat"><b id="stViews">0</b><small>오늘 페이지 조회</small></div>
         <div class="stat"><b id="stCaptcha">0</b><small>오늘 보안문자 연습</small></div>
+        <div class="stat"><b id="stSeat">0</b><small>오늘 좌석 연습</small></div>
         <div class="stat"><b id="stChecks">0</b><small>오늘 체크한 횟수</small></div>
       </div>
       <p class="sub" id="stDone"></p>
       <div class="week">
         <table>
-          <thead><tr><th>날짜 (한국 시간)</th><th>방문자</th><th>조회</th><th>보안문자</th><th>체크</th></tr></thead>
+          <thead><tr><th>날짜 (한국 시간)</th><th>방문자</th><th>조회</th><th>보안문자</th><th>좌석</th><th>체크</th></tr></thead>
           <tbody id="weekBody"></tbody>
         </table>
       </div>
@@ -160,6 +162,18 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
             <button type="button" id="eventClear">지정 해제</button>
           </div>
           <p class="msg" id="eventMsg"></p>
+        </section>
+
+        <section class="card" aria-labelledby="h-links">
+          <div class="head"><h2 id="h-links">예매처 링크</h2><span class="sub" id="linkCount">0개</span></div>
+          <p class="sub" style="margin:0">메인 화면 위쪽 "예매처 바로가기"에 보이는 링크예요. 누르면 새 탭에서 열립니다.</p>
+          <ul class="items links" id="links"></ul>
+          <div class="row">
+            <button type="button" id="linkAdd">링크 추가</button>
+            <button type="button" id="linkDefaults">기본 4곳으로</button>
+            <button class="primary" type="button" id="linkSave">저장</button>
+          </div>
+          <p class="msg" id="linkMsg"></p>
         </section>
       </div>
 
@@ -233,12 +247,14 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
     $('#eventTitle').value = s.event.title || ''; $('#eventAt').value = s.event.openAt ? toLocalInput(s.event.openAt) : '';
     updateEventUi(s.event);
     $('#lockOn').checked = !!s.settings.lockChecklist;
+    links = (s.links || []).map(l => ({ ...l })); renderLinks();
     items = s.items; renderItems();
   }
   function renderStats(st) {
     $('#stVisitors').textContent = st.today.visitors;
     $('#stViews').textContent = st.today.views;
     $('#stCaptcha').textContent = st.today.captcha;
+    $('#stSeat').textContent = st.today.seat || 0;
     $('#stChecks').textContent = st.today.checks;
     $('#stDone').textContent = `체크리스트 ${items.length || '-'}개 중 ${st.done}개가 지금 체크되어 있어요.`;
     const max = Math.max(1, ...st.last7.map(d => d.visitors));
@@ -246,7 +262,7 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
     st.last7.slice().reverse().forEach(d => {
       const tr = document.createElement('tr');
       const w = Math.round(d.visitors / max * 60);
-      tr.innerHTML = `<td>${d.day}</td><td><span class="bar" style="width:${w}px"></span>${d.visitors}</td><td>${d.views}</td><td>${d.captcha}</td><td>${d.checks}</td>`;
+      tr.innerHTML = `<td>${d.day}</td><td><span class="bar" style="width:${w}px"></span>${d.visitors}</td><td>${d.views}</td><td>${d.captcha}</td><td>${d.seat || 0}</td><td>${d.checks}</td>`;
       $('#weekBody').append(tr);
     });
   }
@@ -332,6 +348,37 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
     try { items = (await api('POST', '/api/admin/items/restore-defaults', {})).items; dirty.clear(); renderItems(); msg('#itemsMsg', '기본 항목으로 복원했어요.', 'ok'); }
     catch (e) { msg('#itemsMsg', e.message, 'err'); }
   }));
+
+  /* ---------- 예매처 링크 ---------- */
+  const DEFAULT_LINKS = [
+    { name: '멜론티켓', url: 'https://ticket.melon.com' },
+    { name: 'YES24 티켓', url: 'https://ticket.yes24.com' },
+    { name: 'NOL 티켓', url: 'https://tickets.interpark.com' },
+    { name: '티켓링크', url: 'https://www.ticketlink.co.kr' },
+  ];
+  let links = [];
+  function renderLinks() {
+    const ul = $('#links'); ul.innerHTML = '';
+    $('#linkCount').textContent = links.length + '개';
+    if (!links.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = '링크가 없어요. 메인 화면에서 바로가기가 숨겨져요.'; ul.append(li); }
+    links.forEach((l, i) => {
+      const li = document.createElement('li');
+      const name = document.createElement('input'); name.type = 'text'; name.maxLength = 20; name.value = l.name; name.placeholder = '이름'; name.id = 'link-name-' + i;
+      name.setAttribute('aria-label', `${i + 1}번 링크 이름`); name.addEventListener('input', () => { l.name = name.value; });
+      const url = document.createElement('input'); url.type = 'text'; url.maxLength = 300; url.value = l.url; url.placeholder = 'https://'; url.id = 'link-url-' + i;
+      url.setAttribute('aria-label', `${i + 1}번 링크 주소`); url.addEventListener('input', () => { l.url = url.value; });
+      const up = btn('↑', `${i + 1}번 링크 위로`, () => { [links[i - 1], links[i]] = [links[i], links[i - 1]]; renderLinks(); }); up.disabled = i === 0;
+      const del = btn('삭제', `${i + 1}번 링크 삭제`, () => { links.splice(i, 1); renderLinks(); }); del.classList.add('ghost-danger');
+      li.append(name, url, up, del); ul.append(li);
+    });
+    $('#linkAdd').disabled = links.length >= 12;
+  }
+  $('#linkAdd').addEventListener('click', () => { links.push({ name: '', url: '' }); renderLinks(); $('#link-name-' + (links.length - 1)).focus(); });
+  $('#linkDefaults').addEventListener('click', () => { links = DEFAULT_LINKS.map(l => ({ ...l })); renderLinks(); msg('#linkMsg', '기본 4곳으로 채웠어요. 저장을 눌러야 적용돼요.'); });
+  $('#linkSave').addEventListener('click', async () => {
+    try { links = (await api('PUT', '/api/admin/links', { links })).links.map(l => ({ ...l })); renderLinks(); msg('#linkMsg', '저장했어요. 메인 화면에 곧 반영돼요.', 'ok'); }
+    catch (e) { msg('#linkMsg', e.message, 'err'); }
+  });
 
   /* ---------- 공지 ---------- */
   $('#noticeSave').addEventListener('click', async () => {
