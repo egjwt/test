@@ -7,14 +7,11 @@ const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
-const LEGACY_ITEMS_FILE = path.join(DATA_DIR, 'items.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 관리자 로그인 유지 2시간
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;    // 로그인 시도 제한 구간
 const LOGIN_MAX_FAILS = 5;                 // 구간당 허용 실패 횟수
-const MAX_ITEMS = 200;
-const MAX_TEXT = 200;
 const MAX_NOTICE = 300;
 const MAX_TITLE = 100;
 const MAX_BODY = 32 * 1024;
@@ -31,20 +28,6 @@ const TYPES = {
   '.ico': 'image/x-icon',
 };
 
-const DEFAULT_ITEMS = [
-  '멜론 계정 로그인 확인 (오픈 10분 전 다시 로그인)',
-  '본인인증·회원정보 확인 (본인인증 필수 공연 대비)',
-  '결제수단 정하기 · 카드사 앱 로그인 해두기',
-  '공연 상세 페이지 미리 열어두기',
-  '관람일·회차·매수 정하기',
-  '좌석 1·2·3순위 구역 정하기',
-  '브라우저 팝업 차단 해제',
-  '유선 인터넷 또는 안정적인 와이파이 연결',
-  '불필요한 탭·프로그램 닫기',
-  '보안문자 연습 3회 이상',
-  '대기열 진입 후 새로고침하지 않기',
-];
-
 const DEFAULT_LINKS = [
   { name: '멜론티켓', url: 'https://ticket.melon.com' },
   { name: 'YES24 티켓', url: 'https://ticket.yes24.com' },
@@ -52,11 +35,9 @@ const DEFAULT_LINKS = [
   { name: '티켓링크', url: 'https://www.ticketlink.co.kr' },
 ];
 const MAX_LINKS = 12;
-const EMPTY_DAY = () => ({ visitors: 0, views: 0, captcha: 0, seat: 0, checks: 0 });
+const EMPTY_DAY = () => ({ visitors: 0, views: 0, captcha: 0, seat: 0 });
 
 /* ---------- 저장소 (JSON 파일 하나) ---------- */
-const newId = () => crypto.randomBytes(6).toString('hex');
-const defaultItems = () => DEFAULT_ITEMS.map(t => ({ id: newId(), t, d: false }));
 
 let state;
 function loadState() {
@@ -64,13 +45,11 @@ function loadState() {
     state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   } catch {
     state = {};
-    // 이전 버전(items.json)에서 옮겨 오기
-    try { state.items = JSON.parse(fs.readFileSync(LEGACY_ITEMS_FILE, 'utf8')); } catch {}
   }
-  if (!Array.isArray(state.items)) state.items = defaultItems();
+  delete state.items; // 체크리스트 기능은 없앴음
   state.notice = state.notice || { text: '', on: false };
   state.event = state.event || { title: '', openAt: null };
-  state.settings = state.settings || { lockChecklist: false };
+  delete state.settings;
   if (!Array.isArray(state.links)) state.links = DEFAULT_LINKS.map(l => ({ ...l }));
   state.stats = state.stats || { days: {}, seen: { day: '', ids: [] } };
   saveNow();
@@ -201,13 +180,11 @@ function sameOrigin(req) {
 }
 const cleanText = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 
-function publicConfig(req) {
+function publicConfig() {
   return {
     notice: state.notice.on && state.notice.text ? { text: state.notice.text } : null,
     event: state.event.openAt ? { title: state.event.title, openAt: state.event.openAt } : null,
-    lockChecklist: state.settings.lockChecklist,
     links: state.links,
-    isAdmin: isAdmin(req),
   };
 }
 function adminSnapshot() {
@@ -217,12 +194,10 @@ function adminSnapshot() {
     days.push({ day: d, ...EMPTY_DAY(), ...(state.stats.days[d] || {}) });
   }
   return {
-    items: state.items,
     notice: state.notice,
     event: state.event,
-    settings: state.settings,
     links: state.links,
-    stats: { today: days[6], last7: days, done: state.items.filter(x => x.d).length },
+    stats: { today: days[6], last7: days },
   };
 }
 
@@ -237,50 +212,14 @@ async function handleApi(req, res, urlPath) {
     }
   }
   const needAdmin = () => send(res, 401, { error: '관리자 로그인이 필요해요.' });
-  const locked = () => send(res, 403, { error: '관리자가 체크리스트 편집을 잠갔어요.' });
 
   /* 공개 API */
-  if (urlPath === '/api/config' && m === 'GET') return send(res, 200, publicConfig(req));
+  if (urlPath === '/api/config' && m === 'GET') return send(res, 200, publicConfig());
 
   if (urlPath === '/api/track' && m === 'POST') {
     const { e } = await readJson(req);
     if (e === 'captcha' || e === 'seat') countEvent(e);
     return send(res, 204);
-  }
-
-  if (urlPath === '/api/items' && m === 'GET') return send(res, 200, state.items);
-
-  if (urlPath === '/api/items' && m === 'POST') {
-    if (state.settings.lockChecklist && !admin) return locked();
-    const text = cleanText((await readJson(req)).t, MAX_TEXT);
-    if (!text) return send(res, 400, { error: '내용을 입력해 주세요.' });
-    if (state.items.length >= MAX_ITEMS) return send(res, 400, { error: `항목은 ${MAX_ITEMS}개까지 만들 수 있어요.` });
-    const item = { id: newId(), t: text, d: false };
-    state.items.push(item); saveNow();
-    return send(res, 201, item);
-  }
-
-  if (urlPath === '/api/items/uncheck-all' && m === 'POST') {
-    state.items.forEach(x => { x.d = false; }); saveNow();
-    return send(res, 200, state.items);
-  }
-
-  const one = urlPath.match(/^\/api\/items\/([0-9a-f]{12})$/);
-  if (one) {
-    const item = state.items.find(x => x.id === one[1]);
-    if (!item) return send(res, 404, { error: '항목을 찾을 수 없어요.' });
-    if (m === 'PATCH') {
-      const { d } = await readJson(req);
-      if (typeof d !== 'boolean') return send(res, 400, { error: 'd는 true 또는 false여야 해요.' });
-      if (d && !item.d) countEvent('checks');
-      item.d = d; saveNow();
-      return send(res, 200, item);
-    }
-    if (m === 'DELETE') {
-      if (state.settings.lockChecklist && !admin) return locked();
-      state.items = state.items.filter(x => x !== item); saveNow();
-      return send(res, 204);
-    }
   }
 
   /* 관리자 로그인 */
@@ -350,44 +289,6 @@ async function handleApi(req, res, urlPath) {
     }
     state.links = clean; saveNow();
     return send(res, 200, { links: state.links });
-  }
-
-  if (urlPath === '/api/admin/settings' && m === 'PUT') {
-    const b = await readJson(req);
-    if (typeof b.lockChecklist === 'boolean') state.settings.lockChecklist = b.lockChecklist;
-    saveNow(); return send(res, 200, state.settings);
-  }
-
-  if (urlPath === '/api/admin/items' && m === 'DELETE') {
-    const removed = state.items.length;
-    state.items = []; saveNow();
-    console.log(`관리자가 할 일 ${removed}개를 모두 삭제함`);
-    return send(res, 200, { removed, items: state.items });
-  }
-
-  if (urlPath === '/api/admin/items/restore-defaults' && m === 'POST') {
-    state.items = defaultItems(); saveNow();
-    return send(res, 200, { items: state.items });
-  }
-
-  if (urlPath === '/api/admin/items/order' && m === 'PUT') {
-    const { ids } = await readJson(req);
-    if (!Array.isArray(ids)) return send(res, 400, { error: 'ids 목록이 필요해요.' });
-    const byId = new Map(state.items.map(x => [x.id, x]));
-    const ordered = ids.map(id => byId.get(id)).filter(Boolean);
-    const rest = state.items.filter(x => !ids.includes(x.id));
-    state.items = [...new Set([...ordered, ...rest])];
-    saveNow(); return send(res, 200, { items: state.items });
-  }
-
-  const editOne = urlPath.match(/^\/api\/admin\/items\/([0-9a-f]{12})$/);
-  if (editOne && m === 'PATCH') {
-    const item = state.items.find(x => x.id === editOne[1]);
-    if (!item) return send(res, 404, { error: '항목을 찾을 수 없어요.' });
-    const text = cleanText((await readJson(req)).t, MAX_TEXT);
-    if (!text) return send(res, 400, { error: '내용을 입력해 주세요.' });
-    item.t = text; saveNow();
-    return send(res, 200, item);
   }
 
   if (urlPath === '/api/admin/stats' && m === 'GET') return send(res, 200, adminSnapshot().stats);

@@ -7,7 +7,7 @@
 <title>스탠바이 관리자</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-/* Layout: login card alone; after login, stats strip on top, then a two-column grid of control panels */
+/* Layout: login card alone; after login, stats strip on top, then a two-column grid of settings cards */
 :root {
   --bg: #f3f5fa; --surface: #ffffff; --fg: #141a2b; --muted: #5d667d; --line: #d9deea;
   --accent: #2443c9; --accent-soft: #e5eaff; --hot: #d6342a; --hot-soft: #fde9e7; --ok: #18815a;
@@ -64,7 +64,7 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
 .badge { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--ok); color: var(--ok); }
 .badge.off { border-color: var(--line); color: var(--muted); }
 
-.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .links li input[type="text"]:first-child { flex: 0 0 34%; }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat b { font-family: var(--font-num); font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -80,10 +80,7 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
 .items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .items li { display: flex; gap: 6px; align-items: center; }
 .items li input[type="text"] { flex: 1; padding: 6px 9px; font-size: 14px; }
-.items li.dirty input[type="text"] { border-color: var(--accent); }
 .items .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
-.confirm { background: var(--hot-soft); border: 1px solid var(--hot); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
-.confirm p { margin: 0; font-size: 14px; }
 .preview { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
 .preview b { color: var(--accent); font-size: 12px; letter-spacing: 0.08em; margin-right: 8px; }
 
@@ -124,19 +121,16 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
         <div class="stat"><b id="stViews">0</b><small>오늘 페이지 조회</small></div>
         <div class="stat"><b id="stCaptcha">0</b><small>오늘 보안문자 연습</small></div>
         <div class="stat"><b id="stSeat">0</b><small>오늘 좌석 연습</small></div>
-        <div class="stat"><b id="stChecks">0</b><small>오늘 체크한 횟수</small></div>
       </div>
-      <p class="sub" id="stDone"></p>
       <div class="week">
         <table>
-          <thead><tr><th>날짜 (한국 시간)</th><th>방문자</th><th>조회</th><th>보안문자</th><th>좌석</th><th>체크</th></tr></thead>
+          <thead><tr><th>날짜 (한국 시간)</th><th>방문자</th><th>조회</th><th>보안문자</th><th>좌석</th></tr></thead>
           <tbody id="weekBody"></tbody>
         </table>
       </div>
     </section>
 
     <div class="grid">
-      <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
         <section class="card" aria-labelledby="h-notice">
           <div class="head"><h2 id="h-notice">공지 배너</h2><span class="badge off" id="noticeBadge">꺼짐</span></div>
           <label for="noticeText">메인 화면 맨 위에 보일 문구 (300자 이내)
@@ -175,30 +169,6 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
           </div>
           <p class="msg" id="linkMsg"></p>
         </section>
-      </div>
-
-      <section class="card" aria-labelledby="h-items">
-        <div class="head"><h2 id="h-items">체크리스트 관리</h2><span class="sub" id="itemCount">0개</span></div>
-        <label class="switch"><input type="checkbox" id="lockOn"> 방문자는 체크만 가능 (추가·삭제 잠금)</label>
-        <ul class="items" id="items"></ul>
-        <form class="row" id="addForm" style="flex-wrap:nowrap">
-          <input type="text" id="newItem" maxlength="200" placeholder="새 항목">
-          <button type="submit">추가</button>
-        </form>
-        <div class="row">
-          <button type="button" id="saveEdits" class="primary" disabled>수정 내용 저장</button>
-          <button type="button" id="restoreBtn">기본 항목으로 복원</button>
-          <button type="button" id="clearBtn" class="ghost-danger">전부 삭제</button>
-        </div>
-        <div class="confirm" id="confirmBox" hidden>
-          <p id="confirmText"></p>
-          <div class="row">
-            <button class="danger" type="button" id="confirmYes">확인</button>
-            <button type="button" id="confirmNo">취소</button>
-          </div>
-        </div>
-        <p class="msg" id="itemsMsg"></p>
-      </section>
     </div>
   </div>
 </div>
@@ -239,30 +209,24 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
   }
 
   /* ---------- 데이터 반영 ---------- */
-  let items = [];
   function applySnapshot(s) {
-    items = s.items;
     renderStats(s.stats);
     $('#noticeText').value = s.notice.text || ''; $('#noticeOn').checked = !!s.notice.on; updateNoticeUi(s.notice);
     $('#eventTitle').value = s.event.title || ''; $('#eventAt').value = s.event.openAt ? toLocalInput(s.event.openAt) : '';
     updateEventUi(s.event);
-    $('#lockOn').checked = !!s.settings.lockChecklist;
     links = (s.links || []).map(l => ({ ...l })); renderLinks();
-    items = s.items; renderItems();
   }
   function renderStats(st) {
     $('#stVisitors').textContent = st.today.visitors;
     $('#stViews').textContent = st.today.views;
     $('#stCaptcha').textContent = st.today.captcha;
     $('#stSeat').textContent = st.today.seat || 0;
-    $('#stChecks').textContent = st.today.checks;
-    $('#stDone').textContent = `체크리스트 ${items.length || '-'}개 중 ${st.done}개가 지금 체크되어 있어요.`;
     const max = Math.max(1, ...st.last7.map(d => d.visitors));
     $('#weekBody').innerHTML = '';
     st.last7.slice().reverse().forEach(d => {
       const tr = document.createElement('tr');
       const w = Math.round(d.visitors / max * 60);
-      tr.innerHTML = `<td>${d.day}</td><td><span class="bar" style="width:${w}px"></span>${d.visitors}</td><td>${d.views}</td><td>${d.captcha}</td><td>${d.seat || 0}</td><td>${d.checks}</td>`;
+      tr.innerHTML = `<td>${d.day}</td><td><span class="bar" style="width:${w}px"></span>${d.visitors}</td><td>${d.views}</td><td>${d.captcha}</td><td>${d.seat || 0}</td>`;
       $('#weekBody').append(tr);
     });
   }
@@ -278,76 +242,10 @@ input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px
     $('#eventBadge').className = 'badge' + (on ? '' : ' off');
   }
 
-  /* ---------- 체크리스트 편집 ---------- */
-  const dirty = new Map(); // id -> 새 문구
-  function renderItems() {
-    const ul = $('#items'); ul.innerHTML = '';
-    $('#itemCount').textContent = items.length + '개';
-    if (!items.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = '항목이 없어요.'; ul.append(li); }
-    items.forEach((it, i) => {
-      const li = document.createElement('li');
-      const inp = document.createElement('input'); inp.type = 'text'; inp.maxLength = 200; inp.id = 'item-' + it.id;
-      inp.value = dirty.has(it.id) ? dirty.get(it.id) : it.t; inp.setAttribute('aria-label', `${i + 1}번 항목`);
-      if (dirty.has(it.id)) li.className = 'dirty';
-      inp.addEventListener('input', () => {
-        if (inp.value.trim() && inp.value.trim() !== it.t) dirty.set(it.id, inp.value); else dirty.delete(it.id);
-        li.className = dirty.has(it.id) ? 'dirty' : ''; $('#saveEdits').disabled = !dirty.size;
-      });
-      const up = btn('↑', `${i + 1}번 위로`, () => move(i, -1)); up.disabled = i === 0;
-      const down = btn('↓', `${i + 1}번 아래로`, () => move(i, 1)); down.disabled = i === items.length - 1;
-      const del = btn('삭제', `${i + 1}번 삭제`, () => removeItem(it)); del.classList.add('ghost-danger');
-      li.append(inp, up, down, del); ul.append(li);
-    });
-    $('#saveEdits').disabled = !dirty.size;
-  }
   function btn(text, label, fn) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'icon'; b.textContent = text;
     b.setAttribute('aria-label', label); b.addEventListener('click', fn); return b;
   }
-  async function move(i, dir) {
-    const j = i + dir; if (j < 0 || j >= items.length) return;
-    const next = items.slice(); [next[i], next[j]] = [next[j], next[i]];
-    try { items = (await api('PUT', '/api/admin/items/order', { ids: next.map(x => x.id) })).items; renderItems(); }
-    catch (e) { msg('#itemsMsg', e.message, 'err'); }
-  }
-  async function removeItem(it) {
-    try { await api('DELETE', '/api/items/' + it.id); items = items.filter(x => x !== it); dirty.delete(it.id); renderItems(); msg('#itemsMsg', '항목을 삭제했어요.', 'ok'); }
-    catch (e) { msg('#itemsMsg', e.message, 'err'); }
-  }
-  $('#saveEdits').addEventListener('click', async () => {
-    const entries = [...dirty.entries()]; let ok = 0;
-    for (const [id, t] of entries) {
-      try { const r = await api('PATCH', '/api/admin/items/' + id, { t }); const it = items.find(x => x.id === id); if (it) it.t = r.t; dirty.delete(id); ok++; }
-      catch (e) { msg('#itemsMsg', e.message, 'err'); }
-    }
-    renderItems(); if (ok) msg('#itemsMsg', `${ok}개 항목을 수정했어요.`, 'ok');
-  });
-  $('#addForm').addEventListener('submit', async e => {
-    e.preventDefault(); const t = $('#newItem').value.trim(); if (!t) return;
-    try { items.push(await api('POST', '/api/items', { t })); $('#newItem').value = ''; renderItems(); msg('#itemsMsg', '항목을 추가했어요.', 'ok'); }
-    catch (err) { msg('#itemsMsg', err.message, 'err'); }
-  });
-  $('#lockOn').addEventListener('change', async () => {
-    const v = $('#lockOn').checked;
-    try { await api('PUT', '/api/admin/settings', { lockChecklist: v }); msg('#itemsMsg', v ? '방문자의 추가·삭제를 잠갔어요.' : '방문자도 추가·삭제할 수 있어요.', 'ok'); }
-    catch (e) { $('#lockOn').checked = !v; msg('#itemsMsg', e.message, 'err'); }
-  });
-
-  /* 되돌릴 수 없는 작업은 한 번 더 확인 */
-  let pending = null;
-  function ask(text, fn) { pending = fn; $('#confirmText').textContent = text; $('#confirmBox').hidden = false; $('#confirmNo').focus(); }
-  $('#confirmNo').addEventListener('click', () => { pending = null; $('#confirmBox').hidden = true; });
-  $('#confirmYes').addEventListener('click', async () => {
-    const fn = pending; pending = null; $('#confirmBox').hidden = true; if (fn) await fn();
-  });
-  $('#clearBtn').addEventListener('click', () => ask(`체크리스트 항목 ${items.length}개를 모두 지웁니다. 되돌릴 수 없어요.`, async () => {
-    try { const r = await api('DELETE', '/api/admin/items'); items = r.items; dirty.clear(); renderItems(); msg('#itemsMsg', `할 일 ${r.removed}개를 모두 삭제했어요.`, 'ok'); }
-    catch (e) { msg('#itemsMsg', e.message, 'err'); }
-  }));
-  $('#restoreBtn').addEventListener('click', () => ask(`지금 항목 ${items.length}개를 지우고 기본 항목 11개로 되돌립니다.`, async () => {
-    try { items = (await api('POST', '/api/admin/items/restore-defaults', {})).items; dirty.clear(); renderItems(); msg('#itemsMsg', '기본 항목으로 복원했어요.', 'ok'); }
-    catch (e) { msg('#itemsMsg', e.message, 'err'); }
-  }));
 
   /* ---------- 예매처 링크 ---------- */
   const DEFAULT_LINKS = [

@@ -36,7 +36,6 @@
   padding: 12px 16px; font-size: 14.5px; display: flex; gap: 10px; align-items: baseline; }
 .notice-bar b { color: var(--accent); flex: none; font-size: 12px; letter-spacing: 0.08em; }
 .notice-bar span { min-width: 0; overflow-wrap: anywhere; }
-.lock-note { font-size: 13px; color: var(--muted); }
 .sites { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sites .label { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; margin-right: 4px; }
 .site-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line);
@@ -75,8 +74,11 @@ a { color: var(--accent); }
 /* ticket hero */
 .ticket {
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  display: grid; grid-template-columns: minmax(0, 1fr) 260px; position: relative; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) 250px 280px; position: relative; overflow: hidden;
 }
+.ticket .alerts { padding: 22px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ticket .alerts p { margin: 0; color: var(--muted); font-size: 13px; }
+.ticket .alerts .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ticket .main { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ticket .stub {
   padding: 24px 22px; border-left: 2px dashed var(--line); display: flex; flex-direction: column; gap: 12px;
@@ -84,13 +86,15 @@ a { color: var(--accent); }
 }
 .ticket::before, .ticket::after {
   content: ""; position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--bg);
-  right: 249px; border: 1px solid var(--line);
+  right: 519px; border: 1px solid var(--line);
 }
 .ticket::before { top: -12px; } .ticket::after { bottom: -12px; }
 .eyebrow { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
 .countdown { font-size: clamp(40px, 9vw, 84px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; }
 .countdown .cs { font-size: 0.5em; color: var(--muted); }
 .countdown.urgent, .countdown.urgent .cs { color: var(--hot); }
+.countdown .days { font-size: 0.45em; color: var(--muted); margin-right: 0.3em; }
+@media (min-width: 1081px) { .countdown { font-size: 64px; } }
 .countdown.past { color: var(--ok); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .clock-now { font-size: 20px; }
@@ -120,15 +124,6 @@ button.small { font-size: 12px; padding: 5px 10px; }
 .panel .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .result { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
 .result:empty { display: none; }
-.checks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
-.checks li { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid var(--line); }
-.checks li:last-child { border-bottom: 0; }
-.checks input { margin-top: 4px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
-.checks li.done span { color: var(--muted); text-decoration: line-through; }
-.checks span { flex: 1; min-width: 0; font-size: 14px; }
-.checks .del { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: 16px; }
-.progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
-.progress div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
 .cap-box { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
 canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; border: 1px solid var(--line); }
@@ -149,8 +144,16 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
 @keyframes flash { 0% { opacity: 0.92; } 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { #flash.go { animation: none; opacity: 0.9; } }
 
+@media (max-width: 1080px) {
+  .ticket { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ticket .main { grid-column: 1 / -1; }
+  .ticket .stub { border-left: 0; border-top: 2px dashed var(--line); }
+  .ticket .alerts { border-top: 2px dashed var(--line); }
+  .ticket::before, .ticket::after { display: none; }
+}
 @media (max-width: 760px) {
   .ticket { grid-template-columns: minmax(0, 1fr); }
+  .ticket .alerts { border-left: 0; }
   .ticket .stub { border-left: 0; border-top: 2px dashed var(--line); }
   .ticket::before, .ticket::after { display: none; }
   .ticket .main { padding: 20px; }
@@ -191,6 +194,20 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
       <button class="primary" id="arm">알림 켜기</button>
       <span class="sub" id="armState">소리는 버튼을 눌러야 재생할 수 있어요.</span>
     </div>
+    <div class="alerts" role="group" aria-labelledby="h-alert">
+      <div class="head"><h2 id="h-alert">알림 설정</h2><span class="chip" id="alertChip">꺼짐</span></div>
+      <p>소리는 미리 예약되기 때문에 멜론티켓 탭을 보고 있어도 정확한 시각에 울립니다. 화면 깜빡임은 이 탭이 보일 때만 나타나니 두 창을 나란히 띄워 두세요.</p>
+      <label for="preSec">카운트 신호 시작 (오픈 몇 초 전부터 1초마다 삑)
+        <input type="number" id="preSec" min="0" max="30" value="5">
+      </label>
+      <div class="toggles">
+        <label><input type="checkbox" id="optSound" checked> 소리</label>
+        <label><input type="checkbox" id="optFlash" checked> 화면 깜빡임</label>
+        <label><input type="checkbox" id="optWake" checked> 화면 꺼짐 방지</label>
+      </div>
+      <div class="row"><button id="testAlert">알림 미리 듣기</button></div>
+      <div class="notice">팁: 오픈 정각 1~2초 전에 미리 클릭하면 "오픈 전" 페이지가 떠서 오히려 늦어질 수 있어요. 신호가 0에 닿는 순간 예매 버튼을 누르세요.</div>
+    </div>
   </section>
 
   <div class="grid">
@@ -210,33 +227,6 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
         </div>
       </label>
       <p>멜론 서버시간 확인 사이트에서 측정한 값과 다르면 수동으로 맞추세요. 대부분의 예매 서버는 표준시와 0.1초 안쪽으로 맞춰져 있습니다.</p>
-    </section>
-
-    <section class="panel" aria-labelledby="h-alert">
-      <div class="head"><h2 id="h-alert">알림 설정</h2><span class="chip" id="alertChip">꺼짐</span></div>
-      <p>소리는 미리 예약되기 때문에 멜론티켓 탭을 보고 있어도 정확한 시각에 울립니다. 화면 깜빡임은 이 탭이 보일 때만 나타나니 두 창을 나란히 띄워 두세요.</p>
-      <label for="preSec">카운트 신호 시작 (오픈 몇 초 전부터 1초마다 삑)
-        <input type="number" id="preSec" min="0" max="30" value="5">
-      </label>
-      <div class="toggles">
-        <label><input type="checkbox" id="optSound" checked> 소리</label>
-        <label><input type="checkbox" id="optFlash" checked> 화면 깜빡임</label>
-        <label><input type="checkbox" id="optWake" checked> 화면 꺼짐 방지</label>
-      </div>
-      <div class="row"><button id="testAlert">알림 미리 듣기</button></div>
-      <div class="notice">팁: 오픈 정각 1~2초 전에 미리 클릭하면 "오픈 전" 페이지가 떠서 오히려 늦어질 수 있어요. 신호가 0에 닿는 순간 예매 버튼을 누르세요.</div>
-    </section>
-
-    <section class="panel" aria-labelledby="h-check">
-      <div class="head"><h2 id="h-check">준비 체크리스트</h2><span class="sub num" id="checkCount">0/0</span></div>
-      <div class="progress"><div id="checkBar"></div></div>
-      <ul class="checks" id="checks"></ul>
-      <form class="row" id="addForm" style="flex-wrap:nowrap">
-        <input type="text" id="newItem" placeholder="항목 추가 (예: 2순위 구역 R석 B블록)">
-        <button type="submit">추가</button>
-      </form>
-      <p class="lock-note" id="lockNote" hidden>관리자가 항목 추가·삭제를 잠가 두었어요. 체크는 할 수 있어요.</p>
-      <div class="row"><button class="small" id="resetChecks">체크 모두 해제</button></div>
     </section>
 
     <section class="panel" aria-labelledby="h-cap">
@@ -446,7 +436,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
   const cdEl = $('#countdown'), nowEl = $('#nowClock'), cdLabel = $('#cdLabel');
   function fmtDur(ms) {
     const t = Math.floor(ms / 10), cs = t % 100, s = Math.floor(t / 100) % 60, m = Math.floor(t / 6000) % 60, h = Math.floor(t / 360000) % 24, d = Math.floor(t / 8640000);
-    return `${d > 0 ? d + '일 ' : ''}${pad(h)}:${pad(m)}:${pad(s)}<span class="cs">.${pad(cs)}</span>`;
+    return `${d > 0 ? `<span class="days">${d}일</span>` : ''}${pad(h)}:${pad(m)}:${pad(s)}<span class="cs">.${pad(cs)}</span>`;
   }
   let lastRem = target - now();
   function frame() {
@@ -466,22 +456,6 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
   }
   requestAnimationFrame(frame);
 
-  /* ---------- checklist (server-backed, falls back to this browser) ---------- */
-  const defaults = [
-    '멜론 계정 로그인 확인 (오픈 10분 전 다시 로그인)',
-    '본인인증·회원정보 확인 (본인인증 필수 공연 대비)',
-    '결제수단 정하기 · 카드사 앱 로그인 해두기',
-    '공연 상세 페이지 미리 열어두기',
-    '관람일·회차·매수 정하기',
-    '좌석 1·2·3순위 구역 정하기',
-    '브라우저 팝업 차단 해제',
-    '유선 인터넷 또는 안정적인 와이파이 연결',
-    '불필요한 탭·프로그램 닫기',
-    '보안문자 연습 3회 이상',
-    '대기열 진입 후 새로고침하지 않기',
-  ];
-  let items = [];
-  let remote = false;
   async function api(method, url, body) {
     const r = await fetch(url, {
       method, cache: 'no-store',
@@ -491,57 +465,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.status === 204 ? null : r.json();
   }
-  function saveLocal() { if (!remote) store.set('items', items); }
-  async function act(fn) {
-    try { await fn(); } catch { if (remote) await loadItems(); }
-    saveLocal(); renderChecks();
-  }
-  async function loadItems() {
-    try { items = await api('GET', 'api/items'); remote = true; }
-    catch {
-      remote = false;
-      items = store.get('items', null) || defaults.map((t, i) => ({ id: 'l' + i, t, d: false }));
-      items.forEach((it, i) => { if (!it.id) it.id = 'l' + i + '_' + Date.now(); });
-    }
-    renderChecks();
-  }
-  function renderChecks() {
-    const ul = $('#checks'); ul.innerHTML = '';
-    if (!items.length) {
-      const li = document.createElement('li'); li.innerHTML = '<span class="sub">항목이 없어요. 아래에서 추가해 주세요.</span>'; ul.append(li);
-    }
-    items.forEach(it => {
-      const li = document.createElement('li'); if (it.d) li.className = 'done';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = it.d; cb.id = 'ck-' + it.id;
-      const toggle = v => act(async () => { it.d = v; if (remote) await api('PATCH', 'api/items/' + encodeURIComponent(it.id), { d: v }); });
-      cb.addEventListener('change', () => toggle(cb.checked));
-      const sp = document.createElement('span'); sp.textContent = it.t;
-      sp.addEventListener('click', () => toggle(!it.d));
-      const del = document.createElement('button'); del.className = 'del'; del.type = 'button'; del.textContent = '×'; del.setAttribute('aria-label', '삭제');
-      del.addEventListener('click', () => act(async () => {
-        items = items.filter(x => x !== it);
-        if (remote) await api('DELETE', 'api/items/' + encodeURIComponent(it.id));
-      }));
-      del.hidden = !canEdit();
-      li.append(cb, sp, del); ul.append(li);
-    });
-    const done = items.filter(x => x.d).length;
-    $('#checkCount').textContent = `${done}/${items.length}`;
-    $('#checkBar').style.width = items.length ? (done / items.length * 100) + '%' : '0';
-  }
-  $('#addForm').addEventListener('submit', e => {
-    e.preventDefault(); const v = $('#newItem').value.trim(); if (!v) return;
-    $('#newItem').value = '';
-    act(async () => {
-      if (remote) items.push(await api('POST', 'api/items', { t: v }));
-      else items.push({ id: 'l' + Date.now(), t: v, d: false });
-    });
-  });
-  $('#resetChecks').addEventListener('click', () => act(async () => {
-    items.forEach(x => x.d = false);
-    if (remote) items = await api('POST', 'api/items/uncheck-all');
-  }));
-  /* ---------- 관리자 설정 (공지, 공연·오픈일시, 편집 잠금) ---------- */
+  /* ---------- 관리자 설정 (공지, 공연·오픈일시, 예매처 링크) ---------- */
   const DEFAULT_LINKS = [
     { name: '멜론티켓', url: 'https://ticket.melon.com' },
     { name: 'YES24 티켓', url: 'https://ticket.yes24.com' },
@@ -557,8 +481,7 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
     nav.hidden = !links.length;
   }
   renderLinks(DEFAULT_LINKS);
-  let config = { notice: null, event: null, lockChecklist: false, isAdmin: false };
-  function canEdit() { return !config.lockChecklist || config.isAdmin; }
+  let config = { notice: null, event: null, links: DEFAULT_LINKS };
   async function loadConfig() {
     try { config = await api('GET', 'api/config'); } catch { return; }
     renderLinks(Array.isArray(config.links) ? config.links : DEFAULT_LINKS);
@@ -570,15 +493,9 @@ canvas#cap { width: 240px; max-width: 100%; height: 80px; border-radius: 8px; bo
       store.set('lastEventAt', config.event.openAt);
       setTarget(config.event.openAt);
     }
-    $('#addForm').hidden = !canEdit();
-    $('#lockNote').hidden = canEdit();
-    renderChecks();
   }
-  loadConfig().then(loadItems);
-  setInterval(() => {
-    if (document.visibilityState !== 'visible') return;
-    loadConfig(); if (remote) loadItems();
-  }, 15000);
+  loadConfig();
+  setInterval(() => { if (document.visibilityState === 'visible') loadConfig(); }, 15000);
 
   /* ---------- seat selection practice ---------- */
   (() => {
