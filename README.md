@@ -51,13 +51,6 @@ ADMIN_PASSWORD=원하는비밀번호 npm start
 
 포트는 Railway가 넣어 주는 `PORT` 환경 변수를 그대로 씁니다. 상태 확인 경로는 `/health`입니다.
 
-## 자동 배포 (GitHub Actions)
-
-`.github/workflows/railway-deploy.yml`이 브랜치에 코드가 올라올 때마다 Railway에 배포합니다. 처음 한 번만 설정하면 됩니다.
-
-1. Railway 프로젝트 **Settings → Tokens**에서 `production` 환경용 프로젝트 토큰을 만듭니다.
-2. GitHub 저장소 **Settings → Secrets and variables → Actions → New repository secret**에서 이름 `RAILWAY_TOKEN`, 값에 토큰을 넣습니다.
-
 ## 구조
 
 ```
@@ -66,5 +59,4 @@ public/admin.html   관리자 페이지 (/admin)
 public/sync.txt     시간 보정용 파일 (서버 응답의 Date 헤더를 읽음)
 server.js           정적 파일 서버 + 설정·통계 API + 관리자 인증
 railway.json        Railway 배포 설정
-.github/workflows/  자동 배포 설정
 ```
